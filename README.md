@@ -2,6 +2,10 @@
 
 The existing libraries for Redis sessions don't work well in Tomcat 8, and have some interesting design decisions.
 
+## Dependencies
+
+This library leverages [Jedis](https://github.com/xetorthio/jedis) to work with Redis. Those Redis connections are pooled using [Apache Commons Pool2](https://commons.apache.org/proper/commons-pool/). The library is compiled for Java 8.
+
 ## Session Storage Approach
 
 Each fresh session is given a [random UUID](http://docs.oracle.com/javase/8/docs/api/java/util/UUID.html#randomUUID--) as an identifier.
@@ -20,4 +24,5 @@ value set to `false`.
 
 All the keys other than `UUID:attributes` are left to be removed by Redis at its discretion: they are left around for auditing support.
 
-
+Session attributes are retrieved the first time they are needed in a request. Any retrieved or assigned session attribute is persisted back to Redis when the
+request completes: this is because Java allows mutable data to be stored in the session attribute, and it is difficult to recognize when the data has changed.
