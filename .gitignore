@@ -19,6 +19,7 @@ build
 *.iml
 *.ipr
 *.iws
+*.idea
 
 # Ignore vi swap files
 .*.swp
