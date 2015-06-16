@@ -166,7 +166,10 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         }
         standardSession.setMaxInactiveInterval(Integer.valueOf((String) metadata.get(METADATA_MAX_INACTIVE_INTERVAL)));
 
-        
+        for (Enumeration<String> enumerator = attributes.keys(); enumerator.hasMoreElements();) {
+            String key = enumerator.nextElement();
+            standardSession.setAttribute(key, attributes.get(key));
+        }
 
         return standardSession;
     }
