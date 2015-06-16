@@ -5,7 +5,6 @@ import org.apache.catalina.util.LifecycleSupport;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
-import org.apache.commons.lang3.time.DateFormatUtils;
 import org.apache.commons.lang3.SerializationUtils;
 import java.io.IOException;
 import java.text.ParseException;
@@ -41,7 +40,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     private String dbPassword = "";
 
     private static final String ISO_DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ssZ";
-
+    private SimpleDateFormat dateFormat = null;
 
     /**
      * The lifecycle event support for this component.
@@ -102,7 +101,6 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
 
     @Override
     public Session findSession(String id) throws IOException {
-        Session session = null;
 
         //Get connection to redis
         Jedis jedis = redisConnectionPool.getResource();
@@ -113,7 +111,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         Hashtable<String, Object> attributes =
                 (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(jedis.get((id + REDIS_ATTRIBUTES_KEY).getBytes())));
 
-        session = getSession(metadata, attributes);
+        Session session = getSession(metadata, attributes);
 
         redisConnectionPool.returnResourceObject(jedis);
 
@@ -139,7 +137,8 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
 
     @Override
     public void processExpires() {
-       //We need to implement the expire process
+        // We are going to use Redis's ability to expire keys for session expiration.
+        // Do nothing.
     }
 
     //------------------------------------------------------------------------------------------------------------------
@@ -160,13 +159,15 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     private StandardSession getSession(Hashtable<String, Object> metadata, Hashtable<String, Object> attributes){
         StandardSession standardSession = (StandardSession) createEmptySession();
         standardSession.setValid(Boolean.valueOf((String)metadata.get(METADATA_VALID)));
-        SimpleDateFormat format = new SimpleDateFormat(ISO_DATE_FORMAT);
         try {
-            standardSession.setCreationTime(format.parse(((String) metadata.get(METADATA_CREATION_TIME))).getTime());
+            standardSession.setCreationTime(dateFormat.parse(((String) metadata.get(METADATA_CREATION_TIME))).getTime());
         } catch (ParseException e) {
             log.error("Error - Context: getSession. Description: " + e.getMessage());
         }
         standardSession.setMaxInactiveInterval(Integer.valueOf((String) metadata.get(METADATA_MAX_INACTIVE_INTERVAL)));
+
+        
+
         return standardSession;
     }
 
@@ -179,8 +180,8 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     private Hashtable<String, Object> getMetadata(Session session){
         Hashtable<String, Object> metadata = new Hashtable<>();
         metadata.put(METADATA_VALID, String.valueOf(session.isValid()));
-        metadata.put(METADATA_CREATION_TIME, DateFormatUtils.ISO_DATE_FORMAT.format(session.getCreationTime()));
-        metadata.put(METADATA_LAST_ACCESS_TIME, DateFormatUtils.ISO_DATE_FORMAT.format(session.getLastAccessedTime()));
+        metadata.put(METADATA_CREATION_TIME, dateFormat.format(new Date(session.getCreationTime())));
+        metadata.put(METADATA_LAST_ACCESS_TIME, dateFormat.format(new Date(session.getLastAccessedTime())));
         metadata.put(METADATA_MAX_INACTIVE_INTERVAL, String.valueOf(session.getMaxInactiveInterval()));
         return metadata;
     }
@@ -251,6 +252,8 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         setState(LifecycleState.STARTING);
         redisConnectionPoolConfig = new JedisPoolConfig();
         redisConnectionPool = new JedisPool(this.redisConnectionPoolConfig, dbHost, dbPort, dbTimeout, dbPassword);
+
+        dateFormat = new SimpleDateFormat(ISO_DATE_FORMAT);
     }
 
     @Override
