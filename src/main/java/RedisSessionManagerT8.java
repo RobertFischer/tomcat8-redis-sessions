@@ -126,13 +126,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
 
     @Override
     public void remove(Session session, boolean update) {
-        //Get connection to redis
-        Jedis jedis = redisConnectionPool.getResource();
-
-        //Just remove the attributes not the metadata
-        jedis.del((session.getId() + REDIS_ATTRIBUTES_KEY).getBytes());
-
-        redisConnectionPool.returnResourceObject(jedis);
+        //Redis will remove the attributes
     }
 
     @Override
@@ -234,7 +228,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         try{
             jedis.setex((id + REDIS_METADATA_KEY).getBytes(), session.getMaxInactiveInterval(), Base64.getEncoder().encode(SerializationUtils.serialize(metadata)));
             jedis.set((id + REDIS_ATTRIBUTES_KEY).getBytes(), Base64.getEncoder().encode(SerializationUtils.serialize(attributes)));
-            
+
             errorSaving = false;
         }catch (Exception e){
             log.error("Error - Context: saveToRedis. Description: " + e.getMessage());
