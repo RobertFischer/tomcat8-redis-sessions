@@ -81,7 +81,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         try {
             saveSession(session);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Error - Context: createSession. Description: " + e.getMessage());
         }
 
         return session;
@@ -96,7 +96,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         try {
             saveSession(session);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Error - Context: add. Description: " + e.getMessage());
         }
     }
 
@@ -164,7 +164,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         try {
             standardSession.setCreationTime(format.parse(((String) metadata.get(METADATA_CREATION_TIME))).getTime());
         } catch (ParseException e) {
-            e.printStackTrace();
+            log.error("Error - Context: getSession. Description: " + e.getMessage());
         }
         standardSession.setMaxInactiveInterval(Integer.valueOf((String) metadata.get(METADATA_MAX_INACTIVE_INTERVAL)));
         return standardSession;
@@ -232,6 +232,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
             jedis.set((id + REDIS_ATTRIBUTES_KEY).getBytes(), Base64.getEncoder().encode(SerializationUtils.serialize(attributes)));
             errorSaving = false;
         }catch (Exception e){
+            log.error("Error - Context: saveToRedis. Description: " + e.getMessage());
         }
         return errorSaving;
     }
@@ -258,7 +259,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         try {
             redisConnectionPool.destroy();
         } catch(Exception e) {
-            // Do nothing.
+            log.error("Error - Context: stopInternal. Description: " + e.getMessage());
         }
         super.stopInternal();
     }
