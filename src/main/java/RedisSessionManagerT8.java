@@ -79,9 +79,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         session.setMaxInactiveInterval(this.maxInactiveInterval);
 
         try {
-            Jedis jedis = redisConnectionPool.getResource();
-            saveToRedis(jedis, session);
-            redisConnectionPool.returnResourceObject(jedis);
+            saveSession(session);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -96,12 +94,9 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     @Override
     public void add(Session session) {
         try {
-            Jedis jedis = redisConnectionPool.getResource();
-            saveToRedis(jedis, session);
-            redisConnectionPool.returnResourceObject(jedis);
-        } catch (IOException ex) {
-            log.warn("Unable to add to session manager store: " + ex.getMessage());
-            throw new RuntimeException("Unable to add to session manager store.", ex);
+            saveSession(session);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -214,6 +209,11 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     // START REDIS
     //------------------------------------------------------------------------------------------------------------------
 
+    private void saveSession(Session session) throws IOException {
+        Jedis jedis = redisConnectionPool.getResource();
+        saveToRedis(jedis, session);
+        redisConnectionPool.returnResourceObject(jedis);
+    }
 
     /**
      * Method to saved session in redis
