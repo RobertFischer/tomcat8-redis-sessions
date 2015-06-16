@@ -232,8 +232,9 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         Hashtable<String, Object> metadata = getMetadata(session);
         Hashtable<String, Object> attributes = getAttributes(session);
         try{
-            jedis.set((id + REDIS_METADATA_KEY).getBytes(), Base64.getEncoder().encode(SerializationUtils.serialize(metadata)));
+            jedis.setex((id + REDIS_METADATA_KEY).getBytes(), session.getMaxInactiveInterval(), Base64.getEncoder().encode(SerializationUtils.serialize(metadata)));
             jedis.set((id + REDIS_ATTRIBUTES_KEY).getBytes(), Base64.getEncoder().encode(SerializationUtils.serialize(attributes)));
+            
             errorSaving = false;
         }catch (Exception e){
             log.error("Error - Context: saveToRedis. Description: " + e.getMessage());
