@@ -20,7 +20,7 @@ import org.apache.juli.logging.LogFactory;
  */
 public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
 
-    private final Log log = LogFactory.getLog(RedisSessionManagerT8.class);
+    private static final Log log = LogFactory.getLog(RedisSessionManagerT8.class);
 
     private static final String REDIS_METADATA_KEY = ":metadata";
     private static final String REDIS_ATTRIBUTES_KEY = ":attributes";
