@@ -221,11 +221,11 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         try{
             //Save metadata to Redis
             byte[] encodedMetadata = Base64.getEncoder().encode(SerializationUtils.serialize(metadata));
-            withRedis((Jedis jedis)-> jedis.setex((id + REDIS_METADATA_KEY).getBytes(), session.getMaxInactiveInterval(), encodedMetadata));
+            withRedis((Jedis jedis)-> jedis.set((id + REDIS_METADATA_KEY).getBytes(), encodedMetadata));
 
             //Save Attributes to Redis
             byte[] encodedAttributes = Base64.getEncoder().encode(SerializationUtils.serialize(attributes));
-            withRedis((Jedis jedis)-> jedis.set((id + REDIS_ATTRIBUTES_KEY).getBytes(), encodedAttributes));
+            withRedis((Jedis jedis)-> jedis.setex((id + REDIS_ATTRIBUTES_KEY).getBytes(), session.getMaxInactiveInterval(), encodedAttributes));
 
             errorSaving = false;
         }catch (Exception e){
