@@ -102,18 +102,17 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     @Override
     public Session findSession(String id) throws IOException {
 
-        //Get connection to redis
-        Jedis jedis = redisConnectionPool.getResource();
-
+        //Get metadata from Redis
+        byte[] encodedMetadata = withRedis((Jedis jedis)-> jedis.get((id + REDIS_METADATA_KEY).getBytes()));
         Hashtable<String, Object> metadata =
-                (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(jedis.get((id + REDIS_METADATA_KEY).getBytes())));
+                (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(encodedMetadata));
 
+        //Get attributes from Redis
+        byte[] encodedAttributes = withRedis((Jedis jedis)-> jedis.get((id + REDIS_ATTRIBUTES_KEY).getBytes()));
         Hashtable<String, Object> attributes =
-                (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(jedis.get((id + REDIS_ATTRIBUTES_KEY).getBytes())));
+                (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(encodedAttributes));
 
         Session session = getSession(metadata, attributes);
-
-        redisConnectionPool.returnResourceObject(jedis);
 
         return session;
     }
@@ -207,33 +206,54 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     // START REDIS
     //------------------------------------------------------------------------------------------------------------------
 
-    private void saveSession(Session session) throws IOException {
-        Jedis jedis = redisConnectionPool.getResource();
-        saveToRedis(jedis, session);
-        redisConnectionPool.returnResourceObject(jedis);
-    }
-
     /**
      * Method to saved session in redis
      * @param session
      * @return
      * @throws IOException
      */
-    protected boolean saveToRedis(Jedis jedis, Session session) throws IOException {
+    protected boolean saveSession(Session session) throws IOException {
         boolean errorSaving = true;
         //Get the session Id
         String id = session.getId();
         Hashtable<String, Object> metadata = getMetadata(session);
         Hashtable<String, Object> attributes = getAttributes(session);
         try{
-            jedis.setex((id + REDIS_METADATA_KEY).getBytes(), session.getMaxInactiveInterval(), Base64.getEncoder().encode(SerializationUtils.serialize(metadata)));
-            jedis.set((id + REDIS_ATTRIBUTES_KEY).getBytes(), Base64.getEncoder().encode(SerializationUtils.serialize(attributes)));
+            //Save metadata to Redis
+            byte[] encodedMetadata = Base64.getEncoder().encode(SerializationUtils.serialize(metadata));
+            withRedis((Jedis jedis)-> jedis.setex((id + REDIS_METADATA_KEY).getBytes(), session.getMaxInactiveInterval(), encodedMetadata));
+
+            //Save Attributes to Redis
+            byte[] encodedAttributes = Base64.getEncoder().encode(SerializationUtils.serialize(attributes));
+            withRedis((Jedis jedis)-> jedis.set((id + REDIS_ATTRIBUTES_KEY).getBytes(), encodedAttributes));
 
             errorSaving = false;
         }catch (Exception e){
             log.error("Error - Context: saveToRedis. Description: " + e.getMessage());
         }
         return errorSaving;
+    }
+
+    private interface RedisCallback<T> {
+        T apply(Jedis jedis) throws IOException;
+    }
+
+    private <T> T withRedis(RedisCallback<T> callback) throws IOException {
+        Objects.requireNonNull(redisConnectionPool, "redis connection pool must be initialized");
+        Objects.requireNonNull(callback, "callback needs to be provided");
+        Jedis jedis = null;
+        try {
+            jedis = redisConnectionPool.getResource();
+            T result = callback.apply(jedis);
+            redisConnectionPool.returnResourceObject(jedis);
+            return result;
+        } catch(IOException ioe) {
+            redisConnectionPool.returnBrokenResource(jedis);
+            throw ioe;
+        } catch(Exception e) {
+            redisConnectionPool.returnBrokenResource(jedis);
+            throw new RuntimeException("Error working with Redis", e);
+        }
     }
 
     //------------------------------------------------------------------------------------------------------------------
