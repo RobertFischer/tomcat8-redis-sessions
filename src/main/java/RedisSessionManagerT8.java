@@ -241,17 +241,16 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     private <T> T withRedis(RedisCallback<T> callback) throws IOException {
         Objects.requireNonNull(redisConnectionPool, "redis connection pool must be initialized");
         Objects.requireNonNull(callback, "callback needs to be provided");
-        Jedis jedis = null;
-        try {
-            jedis = redisConnectionPool.getResource();
-            T result = callback.apply(jedis);
-            redisConnectionPool.returnResourceObject(jedis);
-            return result;
-        } catch(IOException ioe) {
-            redisConnectionPool.returnBrokenResource(jedis);
-            throw ioe;
-        } catch(Exception e) {
-            redisConnectionPool.returnBrokenResource(jedis);
+        try(Jedis jedis = redisConnectionPool.getResource()){
+            try {
+                T result = callback.apply(jedis);
+                redisConnectionPool.returnResourceObject(jedis);
+                return result;
+            } catch(IOException ioe) {
+                redisConnectionPool.returnBrokenResource(jedis);
+                throw ioe;
+            }
+        }catch(Exception e) {
             throw new RuntimeException("Error working with Redis", e);
         }
     }
