@@ -245,7 +245,6 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
             T result = callback.apply(jedis);
             redisConnectionPool.returnResourceObject(jedis);
             return result;
-
         }catch(Exception e) {
             redisConnectionPool.returnBrokenResource(jedis);
             throw new RuntimeException("Error working with Redis", e);
