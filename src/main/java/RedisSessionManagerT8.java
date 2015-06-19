@@ -18,7 +18,7 @@ import redis.clients.jedis.Transaction;
 /**
  * Created by Cesar Valverde on 6/10/2015.
  */
-public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
+public class RedisSessionManagerT8 extends ManagerBase{
 
     private static final Log log = LogFactory.getLog(RedisSessionManagerT8.class);
 
@@ -39,11 +39,6 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     private int dbPort = 2222;
     private int dbTimeout = 0;
     private String dbPassword = "";
-
-    /**
-     * The lifecycle event support for this component.
-     */
-    protected LifecycleSupport lifecycle = new LifecycleSupport(this);
 
     @Override
     public void load() throws ClassNotFoundException, IOException {
@@ -99,20 +94,29 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
 
     @Override
     public Session findSession(String id) throws IOException {
+        try {
 
-        //Get metadata from Redis
-        byte[] encodedMetadata = withRedis((Jedis jedis)-> jedis.get((id + REDIS_METADATA_KEY).getBytes()));
-        Hashtable<String, Object> metadata =
-                (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(encodedMetadata));
+            Hashtable<String, byte[]> result = withRedis(
+                    (Jedis jedis)-> {
+                        Hashtable<String, byte[]> r =  new Hashtable<>();
+                        r.put(REDIS_METADATA_KEY, jedis.get((id + REDIS_METADATA_KEY).getBytes()));
+                        r.put(REDIS_ATTRIBUTES_KEY, jedis.get((id + REDIS_ATTRIBUTES_KEY).getBytes()));
+                        return r;
+                    }
+            );
 
-        //Get attributes from Redis
-        byte[] encodedAttributes = withRedis((Jedis jedis)-> jedis.get((id + REDIS_ATTRIBUTES_KEY).getBytes()));
-        Hashtable<String, Object> attributes =
-                (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(encodedAttributes));
+            Hashtable<String, Object> metadata =
+                    (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(result.get(REDIS_METADATA_KEY)));
 
-        Session session = getSession(metadata, attributes);
+            Hashtable<String, Object> attributes =
+                    (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(result.get(REDIS_ATTRIBUTES_KEY)));
 
-        return session;
+            return getSession(metadata, attributes);
+
+        } catch (Exception e) {
+            log.error("Error - Context: findSession. Description: " + e.getMessage());
+            throw new IOException("Session not found with id: " + id);
+        }
     }
 
     @Override
@@ -224,7 +228,8 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
             withRedis(
                     (Jedis jedis)-> {
                         jedis.setex((id + REDIS_ATTRIBUTES_KEY).getBytes(), session.getMaxInactiveInterval(), encodedAttributes);
-                        return jedis.set((id + REDIS_METADATA_KEY).getBytes(), encodedMetadata);
+                        jedis.set((id + REDIS_METADATA_KEY).getBytes(), encodedMetadata);
+                        return 0;
                     }
             );
 
@@ -285,35 +290,6 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         super.stopInternal();
     }
 
-    /**
-     * Add a lifecycle event listener to this component.
-     *
-     * @param listener The listener to add
-     */
-    @Override
-    public void addLifecycleListener(LifecycleListener listener) {
-        lifecycle.addLifecycleListener(listener);
-    }
-
-    /**
-     * Get the lifecycle listeners associated with this lifecycle. If this
-     * Lifecycle has no listeners registered, a zero-length array is returned.
-     */
-    @Override
-    public LifecycleListener[] findLifecycleListeners() {
-        return lifecycle.findLifecycleListeners();
-    }
-
-
-    /**
-     * Remove a lifecycle event listener from this component.
-     *
-     * @param listener The listener to remove
-     */
-    @Override
-    public void removeLifecycleListener(LifecycleListener listener) {
-        lifecycle.removeLifecycleListener(listener);
-    }
     //------------------------------------------------------------------------------------------------------------------
     // END Lifecycle
     //------------------------------------------------------------------------------------------------------------------
