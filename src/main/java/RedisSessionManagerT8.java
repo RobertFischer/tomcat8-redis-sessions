@@ -2,13 +2,13 @@ import org.apache.catalina.*;
 import org.apache.catalina.session.ManagerBase;
 import org.apache.catalina.session.StandardSession;
 import org.apache.catalina.util.LifecycleSupport;
+import org.apache.commons.lang3.time.DateFormatUtils;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 import org.apache.commons.lang3.SerializationUtils;
 import java.io.IOException;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.*;
 
 import org.apache.juli.logging.Log;
@@ -38,9 +38,6 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     private int dbPort = 2222;
     private int dbTimeout = 0;
     private String dbPassword = "";
-
-    private static final String ISO_DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ssZ";
-    private SimpleDateFormat dateFormat = null;
 
     /**
      * The lifecycle event support for this component.
@@ -153,7 +150,7 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         StandardSession standardSession = (StandardSession) createEmptySession();
         standardSession.setValid(Boolean.valueOf((String)metadata.get(METADATA_VALID)));
         try {
-            standardSession.setCreationTime(dateFormat.parse(((String) metadata.get(METADATA_CREATION_TIME))).getTime());
+            standardSession.setCreationTime(DateFormatUtils.ISO_DATE_FORMAT.parse(((String) metadata.get(METADATA_CREATION_TIME))).getTime());
         } catch (ParseException e) {
             log.error("Error - Context: getSession. Description: " + e.getMessage());
         }
@@ -176,8 +173,8 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     private Hashtable<String, Object> getMetadata(Session session){
         Hashtable<String, Object> metadata = new Hashtable<>();
         metadata.put(METADATA_VALID, String.valueOf(session.isValid()));
-        metadata.put(METADATA_CREATION_TIME, dateFormat.format(new Date(session.getCreationTime())));
-        metadata.put(METADATA_LAST_ACCESS_TIME, dateFormat.format(new Date(session.getLastAccessedTime())));
+        metadata.put(METADATA_CREATION_TIME, DateFormatUtils.ISO_DATE_FORMAT.format(new Date(session.getCreationTime())));
+        metadata.put(METADATA_LAST_ACCESS_TIME, DateFormatUtils.ISO_DATE_FORMAT.format(new Date(session.getLastAccessedTime())));
         metadata.put(METADATA_MAX_INACTIVE_INTERVAL, String.valueOf(session.getMaxInactiveInterval()));
         return metadata;
     }
@@ -269,8 +266,6 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
         setState(LifecycleState.STARTING);
         redisConnectionPoolConfig = new JedisPoolConfig();
         redisConnectionPool = new JedisPool(this.redisConnectionPoolConfig, dbHost, dbPort, dbTimeout, dbPassword);
-
-        dateFormat = new SimpleDateFormat(ISO_DATE_FORMAT);
     }
 
     @Override
