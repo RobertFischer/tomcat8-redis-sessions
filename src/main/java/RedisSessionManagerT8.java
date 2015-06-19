@@ -92,6 +92,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
         }
     }
 
+
     @Override
     public Session findSession(String id) throws IOException {
         try {
@@ -286,6 +287,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
             redisConnectionPool.destroy();
         } catch(Exception e) {
             log.error("Error - Context: stopInternal. Description: " + e.getMessage());
+            throw new LifecycleException(e.getMessage());
         }
         super.stopInternal();
     }
