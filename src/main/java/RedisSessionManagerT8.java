@@ -1,7 +1,5 @@
 import org.apache.catalina.*;
 import org.apache.catalina.session.ManagerBase;
-import org.apache.catalina.session.StandardSession;
-import org.apache.catalina.util.LifecycleSupport;
 import org.apache.commons.lang3.time.DateFormatUtils;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -59,9 +57,14 @@ public class RedisSessionManagerT8 extends ManagerBase{
     }
 
     @Override
+    protected RedisSessionT8 getNewSession() {
+        return new RedisSessionT8(this);
+    }
+
+    @Override
     public Session createSession(String requestedSessionId) {
 
-        Session session = createEmptySession();
+        RedisSessionT8 session = (RedisSessionT8) createEmptySession();
 
         // Initialize the properties of the new session and return it
         session.setId(UUID.randomUUID().toString());
@@ -152,22 +155,30 @@ public class RedisSessionManagerT8 extends ManagerBase{
      * @param attributes
      * @return
      */
-    private StandardSession getSession(Hashtable<String, Object> metadata, Hashtable<String, Object> attributes){
-        StandardSession standardSession = (StandardSession) createEmptySession();
-        standardSession.setValid(Boolean.valueOf((String)metadata.get(METADATA_VALID)));
+    private RedisSessionT8 getSession(Hashtable<String, Object> metadata, Hashtable<String, Object> attributes){
+        RedisSessionT8 session = (RedisSessionT8) createEmptySession();
+        session.setValid(Boolean.valueOf((String) metadata.get(METADATA_VALID)));
+
         try {
-            standardSession.setCreationTime(DateFormatUtils.ISO_DATE_FORMAT.parse(((String) metadata.get(METADATA_CREATION_TIME))).getTime());
+            session.setCreationTime(DateFormatUtils.ISO_DATE_FORMAT.parse(((String) metadata.get(METADATA_CREATION_TIME))).getTime());
         } catch (ParseException e) {
             log.error("Error - Context: getSession. Description: " + e.getMessage());
         }
-        standardSession.setMaxInactiveInterval(Integer.valueOf((String) metadata.get(METADATA_MAX_INACTIVE_INTERVAL)));
+
+        try {
+            session.setLastAccessedTime(DateFormatUtils.ISO_DATE_FORMAT.parse(((String) metadata.get(METADATA_LAST_ACCESS_TIME))).getTime());
+        } catch (ParseException e) {
+            log.error("Error - Context: getSession. Description: " + e.getMessage());
+        }
+
+        session.setMaxInactiveInterval(Integer.valueOf((String) metadata.get(METADATA_MAX_INACTIVE_INTERVAL)));
 
         for (Enumeration<String> enumerator = attributes.keys(); enumerator.hasMoreElements();) {
             String key = enumerator.nextElement();
-            standardSession.setAttribute(key, attributes.get(key));
+            session.setAttribute(key, attributes.get(key));
         }
 
-        return standardSession;
+        return session;
     }
 
 
@@ -191,11 +202,11 @@ public class RedisSessionManagerT8 extends ManagerBase{
      * @return
      */
     private Hashtable<String, Object> getAttributes(Session session){
-        StandardSession standardSession = (StandardSession)session;
+        RedisSessionT8 redisSession = (RedisSessionT8)session;
         Hashtable<String, Object> attributes = new Hashtable();
-        for (Enumeration<String> enumerator = standardSession.getAttributeNames(); enumerator.hasMoreElements();) {
+        for (Enumeration<String> enumerator = redisSession.getAttributeNames(); enumerator.hasMoreElements();) {
             String key = enumerator.nextElement();
-            attributes.put(key, standardSession.getAttribute(key));
+            attributes.put(key, redisSession.getAttribute(key));
         }
         return attributes;
     }
