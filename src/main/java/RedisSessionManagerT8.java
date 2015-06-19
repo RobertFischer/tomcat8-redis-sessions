@@ -13,6 +13,7 @@ import java.util.*;
 
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
+import redis.clients.jedis.Transaction;
 
 /**
  * Created by Cesar Valverde on 6/10/2015.
@@ -241,11 +242,17 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     private <T> T withRedis(RedisCallback<T> callback) throws Exception {
         Objects.requireNonNull(redisConnectionPool, "redis connection pool must be initialized");
         Objects.requireNonNull(callback, "callback needs to be provided");
-        try(Jedis jedis = redisConnectionPool.getResource()){
+        Jedis jedis = null;
+        Transaction transaction = null;
+        try {
+            jedis = redisConnectionPool.getResource();
+            transaction = jedis.multi();
             T result = callback.apply(jedis);
+            transaction.exec();
             redisConnectionPool.returnResourceObject(jedis);
             return result;
-        }catch(Exception e) {
+        } catch (Exception e) {
+            transaction.discard();
             redisConnectionPool.returnBrokenResource(jedis);
             throw new RuntimeException("Error working with Redis", e);
         }
