@@ -235,10 +235,10 @@ public class RedisSessionManagerT8 extends ManagerBase implements Lifecycle {
     }
 
     private interface RedisCallback<T> {
-        T apply(Jedis jedis) throws IOException;
+        T apply(Jedis jedis) throws Exception;
     }
 
-    private <T> T withRedis(RedisCallback<T> callback) throws IOException {
+    private <T> T withRedis(RedisCallback<T> callback) throws Exception {
         Objects.requireNonNull(redisConnectionPool, "redis connection pool must be initialized");
         Objects.requireNonNull(callback, "callback needs to be provided");
         try(Jedis jedis = redisConnectionPool.getResource()){
