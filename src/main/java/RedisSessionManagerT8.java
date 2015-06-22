@@ -254,8 +254,8 @@ public class RedisSessionManagerT8 extends ManagerBase{
      * Method to saved session in redis
      * @param session
      */
-    protected boolean saveSession(Session session){
-        boolean errorSaving = true;
+    protected void saveSession(Session session){
+
         //Get the session Id
         String id = session.getId();
         Hashtable<String, Object> metadata = getMetadata(session);
@@ -273,11 +273,9 @@ public class RedisSessionManagerT8 extends ManagerBase{
                     }
             );
 
-            errorSaving = false;
         }catch (Exception e){
             log.error("Error - Context: saveToRedis.", e);
         }
-        return errorSaving;
     }
 
     private interface RedisCallback<T> {
