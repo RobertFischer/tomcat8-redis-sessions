@@ -199,7 +199,9 @@ public class RedisSessionManagerT8 extends ManagerBase{
             log.error("Error - Context: getSession.", e);
         }
 
-        session.setMaxInactiveInterval(Integer.valueOf((String) metadata.get(METADATA_MAX_INACTIVE_INTERVAL)));
+        if(metadata.contains(METADATA_MAX_INACTIVE_INTERVAL)){
+            session.setMaxInactiveInterval(Integer.valueOf((String) metadata.get(METADATA_MAX_INACTIVE_INTERVAL)));
+        }
 
         for (Enumeration<String> enumerator = attributes.keys(); enumerator.hasMoreElements();) {
             String key = enumerator.nextElement();
