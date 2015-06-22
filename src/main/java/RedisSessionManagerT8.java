@@ -104,13 +104,13 @@ public class RedisSessionManagerT8 extends ManagerBase{
     @Override
     public Session findSession(String id) throws IOException {
 
-        Hashtable<String, byte[]> result = null;
+        Hashtable<String, String> result = null;
         try {
             result = withRedis(
                 (Jedis jedis)-> {
-                    Hashtable<String, byte[]> r =  new Hashtable<>();
-                    r.put(REDIS_METADATA_KEY, jedis.get((id + REDIS_METADATA_KEY).getBytes()));
-                    r.put(REDIS_ATTRIBUTES_KEY, jedis.get((id + REDIS_ATTRIBUTES_KEY).getBytes()));
+                    Hashtable<String, String> r =  new Hashtable<>();
+                    r.put(REDIS_METADATA_KEY, jedis.get(id + REDIS_METADATA_KEY));
+                    r.put(REDIS_ATTRIBUTES_KEY, jedis.get(id + REDIS_ATTRIBUTES_KEY));
                     return r;
                 }
             );
@@ -143,10 +143,10 @@ public class RedisSessionManagerT8 extends ManagerBase{
                 (Jedis jedis)-> {
 
                     //Remove attributes
-                   jedis.del((session.getId() + REDIS_ATTRIBUTES_KEY).getBytes());
+                   jedis.del((session.getId() + REDIS_ATTRIBUTES_KEY));
 
                     //Get metadata from jedis
-                    byte[] decodedMetadata = jedis.get((session.getId() + REDIS_METADATA_KEY).getBytes());
+                    String decodedMetadata = jedis.get((session.getId() + REDIS_METADATA_KEY));
                     Hashtable<String, Object> metadata =
                             (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(decodedMetadata));
 
@@ -155,7 +155,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
 
                     //Save metadata to Jedis
                     byte[] encodedMetadata = Base64.getEncoder().encode(SerializationUtils.serialize(metadata));
-                    jedis.set((session.getId() + REDIS_METADATA_KEY).getBytes(), encodedMetadata);
+                    jedis.set(session.getId() + REDIS_METADATA_KEY, encodedMetadata.toString());
 
                     return 0;
 
@@ -274,8 +274,8 @@ public class RedisSessionManagerT8 extends ManagerBase{
 
         withRedis(
                 (Jedis jedis)-> {
-                    jedis.setex((id + REDIS_ATTRIBUTES_KEY).getBytes(), session.getMaxInactiveInterval(), encodedAttributes);
-                    jedis.set((id + REDIS_METADATA_KEY).getBytes(), encodedMetadata);
+                    jedis.setex(id + REDIS_ATTRIBUTES_KEY, session.getMaxInactiveInterval(), encodedAttributes.toString());
+                    jedis.set(id + REDIS_METADATA_KEY, encodedMetadata.toString());
                     return 0;
                 }
         );
