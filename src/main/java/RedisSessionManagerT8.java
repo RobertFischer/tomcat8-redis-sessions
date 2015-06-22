@@ -62,9 +62,14 @@ public class RedisSessionManagerT8 extends ManagerBase{
     }
 
     @Override
+    public RedisSessionT8 createEmptySession() {
+        return (getNewSession());
+    }
+
+    @Override
     public Session createSession(String requestedSessionId) {
 
-        RedisSessionT8 session = (RedisSessionT8) createEmptySession();
+        RedisSessionT8 session = createEmptySession();
 
         // Initialize the properties of the new session and return it
         session.setId(UUID.randomUUID().toString());
