@@ -78,7 +78,11 @@ public class RedisSessionManagerT8 extends ManagerBase{
         session.setCreationTime(System.currentTimeMillis());
         session.setMaxInactiveInterval(this.maxInactiveInterval);
 
-        saveSession(session);
+        try {
+            saveSession(session);
+        } catch (Exception e) {
+            log.error("Error - Context: createSession.", e);
+        }
 
         return session;
     }
@@ -89,7 +93,11 @@ public class RedisSessionManagerT8 extends ManagerBase{
      */
     @Override
     public void add(Session session) {
-        saveSession(session);
+        try {
+            saveSession(session);
+        } catch (Exception e) {
+            log.error("Error - Context: add.", e);
+        }
     }
 
 
@@ -254,28 +262,23 @@ public class RedisSessionManagerT8 extends ManagerBase{
      * Method to saved session in redis
      * @param session
      */
-    protected void saveSession(Session session){
+    protected void saveSession(Session session) throws Exception{
 
         //Get the session Id
         String id = session.getId();
         Hashtable<String, Object> metadata = getMetadata(session);
         Hashtable<String, Object> attributes = getAttributes(session);
-        try{
 
-            byte[] encodedMetadata = Base64.getEncoder().encode(SerializationUtils.serialize(metadata));
-            byte[] encodedAttributes = Base64.getEncoder().encode(SerializationUtils.serialize(attributes));
+        byte[] encodedMetadata = Base64.getEncoder().encode(SerializationUtils.serialize(metadata));
+        byte[] encodedAttributes = Base64.getEncoder().encode(SerializationUtils.serialize(attributes));
 
-            withRedis(
-                    (Jedis jedis)-> {
-                        jedis.setex((id + REDIS_ATTRIBUTES_KEY).getBytes(), session.getMaxInactiveInterval(), encodedAttributes);
-                        jedis.set((id + REDIS_METADATA_KEY).getBytes(), encodedMetadata);
-                        return 0;
-                    }
-            );
-
-        }catch (Exception e){
-            log.error("Error - Context: saveToRedis.", e);
-        }
+        withRedis(
+                (Jedis jedis)-> {
+                    jedis.setex((id + REDIS_ATTRIBUTES_KEY).getBytes(), session.getMaxInactiveInterval(), encodedAttributes);
+                    jedis.set((id + REDIS_METADATA_KEY).getBytes(), encodedMetadata);
+                    return 0;
+                }
+        );
     }
 
     private interface RedisCallback<T> {
