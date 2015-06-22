@@ -78,11 +78,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
         session.setCreationTime(System.currentTimeMillis());
         session.setMaxInactiveInterval(this.maxInactiveInterval);
 
-        try {
-            saveSession(session);
-        } catch (IOException e) {
-            log.error("Error - Context: createSession. Description: " + e.getMessage());
-        }
+        saveSession(session);
 
         return session;
     }
@@ -228,8 +224,6 @@ public class RedisSessionManagerT8 extends ManagerBase{
     /**
      * Method to saved session in redis
      * @param session
-     * @return
-     * @throws IOException
      */
     protected boolean saveSession(Session session){
         boolean errorSaving = true;
