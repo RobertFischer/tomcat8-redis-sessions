@@ -231,7 +231,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
      * @return
      * @throws IOException
      */
-    protected boolean saveSession(Session session) throws IOException {
+    protected boolean saveSession(Session session){
         boolean errorSaving = true;
         //Get the session Id
         String id = session.getId();
