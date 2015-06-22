@@ -182,7 +182,10 @@ public class RedisSessionManagerT8 extends ManagerBase{
      */
     private RedisSessionT8 getSession(Hashtable<String, Object> metadata, Hashtable<String, Object> attributes){
         RedisSessionT8 session =  createEmptySession();
-        session.setValid(Boolean.valueOf((String) metadata.get(METADATA_VALID)));
+
+        if(metadata.contains(METADATA_VALID)){
+            session.setValid(Boolean.valueOf((String) metadata.get(METADATA_VALID)));
+        }
 
         try {
             session.setCreationTime(DateFormatUtils.ISO_DATE_FORMAT.parse(((String) metadata.get(METADATA_CREATION_TIME))).getTime());
