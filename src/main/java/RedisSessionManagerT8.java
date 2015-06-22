@@ -298,7 +298,9 @@ public class RedisSessionManagerT8 extends ManagerBase{
             redisConnectionPool.returnResourceObject(jedis);
             return result;
         } catch (Exception e) {
-            transaction.discard();
+            if(transaction != null){
+                transaction.discard();
+            }
             redisConnectionPool.returnBrokenResource(jedis);
             throw new RuntimeException("Error working with Redis", e);
         }
