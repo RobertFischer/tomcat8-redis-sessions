@@ -302,7 +302,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
                 transaction.discard();
             }
             redisConnectionPool.returnBrokenResource(jedis);
-            throw new RuntimeException("Error working with Redis", e);
+            throw e;
         }
     }
 
