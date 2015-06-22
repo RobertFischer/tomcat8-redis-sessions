@@ -128,7 +128,35 @@ public class RedisSessionManagerT8 extends ManagerBase{
 
     @Override
     public void remove(Session session, boolean update) {
-        //Redis will remove the attributes
+
+        //Remove the attributes
+        try {
+            withRedis(
+                (Jedis jedis)-> {
+
+                    //Remove attributes
+                   jedis.del((session.getId() + REDIS_ATTRIBUTES_KEY).getBytes());
+
+                    //Get metadata from jedis
+                    byte[] decodedMetadata = jedis.get((session.getId() + REDIS_METADATA_KEY).getBytes());
+                    Hashtable<String, Object> metadata =
+                            (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(decodedMetadata));
+
+                    //Update the metadata
+                    metadata.put(METADATA_VALID, String.valueOf(false));
+
+                    //Save metadata to Jedis
+                    byte[] encodedMetadata = Base64.getEncoder().encode(SerializationUtils.serialize(metadata));
+                    jedis.set((session.getId() + REDIS_METADATA_KEY).getBytes(), encodedMetadata);
+
+                    return 0;
+
+                }
+            );
+        } catch (Exception e) {
+            log.error("Error - Context: remove." + e);
+        }
+
     }
 
     @Override
