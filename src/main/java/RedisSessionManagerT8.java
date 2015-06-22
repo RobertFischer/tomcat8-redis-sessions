@@ -95,29 +95,29 @@ public class RedisSessionManagerT8 extends ManagerBase{
 
     @Override
     public Session findSession(String id) throws IOException {
+
+        Hashtable<String, byte[]> result = null;
         try {
-
-            Hashtable<String, byte[]> result = withRedis(
-                    (Jedis jedis)-> {
-                        Hashtable<String, byte[]> r =  new Hashtable<>();
-                        r.put(REDIS_METADATA_KEY, jedis.get((id + REDIS_METADATA_KEY).getBytes()));
-                        r.put(REDIS_ATTRIBUTES_KEY, jedis.get((id + REDIS_ATTRIBUTES_KEY).getBytes()));
-                        return r;
-                    }
+            result = withRedis(
+                (Jedis jedis)-> {
+                    Hashtable<String, byte[]> r =  new Hashtable<>();
+                    r.put(REDIS_METADATA_KEY, jedis.get((id + REDIS_METADATA_KEY).getBytes()));
+                    r.put(REDIS_ATTRIBUTES_KEY, jedis.get((id + REDIS_ATTRIBUTES_KEY).getBytes()));
+                    return r;
+                }
             );
-
-            Hashtable<String, Object> metadata =
-                    (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(result.get(REDIS_METADATA_KEY)));
-
-            Hashtable<String, Object> attributes =
-                    (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(result.get(REDIS_ATTRIBUTES_KEY)));
-
-            return getSession(metadata, attributes);
-
         } catch (Exception e) {
             log.error("Error - Context: findSession.", e);
-            throw new IOException("Session not found with id: " + id);
         }
+
+        Hashtable<String, Object> metadata =
+                (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(result.get(REDIS_METADATA_KEY)));
+
+        Hashtable<String, Object> attributes =
+                (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(result.get(REDIS_ATTRIBUTES_KEY)));
+
+        return getSession(metadata, attributes);
+
     }
 
     @Override
