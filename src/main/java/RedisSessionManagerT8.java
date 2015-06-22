@@ -89,11 +89,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
      */
     @Override
     public void add(Session session) {
-        try {
-            saveSession(session);
-        } catch (IOException e) {
-            log.error("Error - Context: add. Description: " + e.getMessage());
-        }
+        saveSession(session);
     }
 
 
@@ -119,7 +115,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
             return getSession(metadata, attributes);
 
         } catch (Exception e) {
-            log.error("Error - Context: findSession. Description: " + e.getMessage());
+            log.error("Error - Context: findSession.", e);
             throw new IOException("Session not found with id: " + id);
         }
     }
@@ -157,19 +153,19 @@ public class RedisSessionManagerT8 extends ManagerBase{
      * @return
      */
     private RedisSessionT8 getSession(Hashtable<String, Object> metadata, Hashtable<String, Object> attributes){
-        RedisSessionT8 session = (RedisSessionT8) createEmptySession();
+        RedisSessionT8 session =  createEmptySession();
         session.setValid(Boolean.valueOf((String) metadata.get(METADATA_VALID)));
 
         try {
             session.setCreationTime(DateFormatUtils.ISO_DATE_FORMAT.parse(((String) metadata.get(METADATA_CREATION_TIME))).getTime());
         } catch (ParseException e) {
-            log.error("Error - Context: getSession. Description: " + e.getMessage());
+            log.error("Error - Context: getSession." + e);
         }
 
         try {
             session.setLastAccessedTime(DateFormatUtils.ISO_DATE_FORMAT.parse(((String) metadata.get(METADATA_LAST_ACCESS_TIME))).getTime());
         } catch (ParseException e) {
-            log.error("Error - Context: getSession. Description: " + e.getMessage());
+            log.error("Error - Context: getSession.", e);
         }
 
         session.setMaxInactiveInterval(Integer.valueOf((String) metadata.get(METADATA_MAX_INACTIVE_INTERVAL)));
@@ -246,7 +242,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
 
             errorSaving = false;
         }catch (Exception e){
-            log.error("Error - Context: saveToRedis. Description: " + e.getMessage());
+            log.error("Error - Context: saveToRedis.", e);
         }
         return errorSaving;
     }
@@ -296,7 +292,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
         try {
             redisConnectionPool.destroy();
         } catch(Exception e) {
-            log.error("Error - Context: stopInternal. Description: " + e.getMessage());
+            log.error("Error - Context: stopInternal.", e);
             throw new LifecycleException(e.getMessage());
         }
         super.stopInternal();
