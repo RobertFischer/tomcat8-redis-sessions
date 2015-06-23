@@ -1,12 +1,9 @@
 import org.apache.catalina.*;
 import org.apache.catalina.session.ManagerBase;
-import org.apache.commons.lang3.time.DateFormatUtils;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
-import org.apache.commons.lang3.SerializationUtils;
 import java.io.IOException;
-import java.text.ParseException;
 import java.util.*;
 
 import org.apache.juli.logging.Log;
@@ -20,15 +17,11 @@ public class RedisSessionManagerT8 extends ManagerBase{
 
     private static final Log log = LogFactory.getLog(RedisSessionManagerT8.class);
 
+    //Redis Keys
     private static final String REDIS_METADATA_KEY = ":metadata";
     private static final String REDIS_ATTRIBUTES_KEY = ":attributes";
 
-    //Metadata keys
-    public static final String METADATA_VALID = "valid";
-    public static final String METADATA_CREATION_TIME = "creation_time";
-    public static final String METADATA_LAST_ACCESS_TIME = "last_access_time";
-    public static final String METADATA_MAX_INACTIVE_INTERVAL = "max_inactive_interval";
-
+    //Redis Connection pool
     protected JedisPool redisConnectionPool = null;
     protected JedisPoolConfig redisConnectionPoolConfig = null;
 
@@ -63,7 +56,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
 
     @Override
     public RedisSessionT8 createEmptySession() {
-        return (getNewSession());
+        return getNewSession();
     }
 
     @Override
@@ -94,13 +87,18 @@ public class RedisSessionManagerT8 extends ManagerBase{
     @Override
     public void add(Session session) {
         try {
-            saveSession(session);
+            saveSession((RedisSessionT8) session);
         } catch (Exception e) {
             log.error("Error - Context: add.", e);
         }
     }
 
-
+    /**
+     * Find a session by id
+     * @param id
+     * @return
+     * @throws IOException
+     */
     @Override
     public Session findSession(String id) throws IOException {
 
@@ -118,26 +116,34 @@ public class RedisSessionManagerT8 extends ManagerBase{
             log.error("Error - Context: findSession.", e);
         }
 
-        Hashtable<String, Object> metadata =
-                (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(result.get(REDIS_METADATA_KEY)));
+        Map<String, Object> metadata =
+                null;
+        try {
+            metadata = (Map)SerializerUtils.bytesToObject(Base64.getDecoder().decode(result.get(REDIS_METADATA_KEY)));
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
 
-        Hashtable<String, Object> attributes =
-                (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(result.get(REDIS_ATTRIBUTES_KEY)));
+        Map<String, Object> attributes =
+                null;
+        try {
+            attributes = (Map)SerializerUtils.bytesToObject(Base64.getDecoder().decode(result.get(REDIS_ATTRIBUTES_KEY)));
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
 
-        return getSession(metadata, attributes);
+        return RedisSessionT8.getSession(this, metadata, attributes);
 
     }
 
     @Override
     public void remove(Session session) {
-
         remove(session, false);
     }
 
     @Override
     public void remove(Session session, boolean update) {
 
-        //Remove the attributes
         try {
             withRedis(
                 (Jedis jedis)-> {
@@ -148,13 +154,13 @@ public class RedisSessionManagerT8 extends ManagerBase{
                     //Get metadata from jedis
                     String decodedMetadata = jedis.get((session.getId() + REDIS_METADATA_KEY));
                     Hashtable<String, Object> metadata =
-                            (Hashtable)SerializationUtils.deserialize(Base64.getDecoder().decode(decodedMetadata));
+                            (Hashtable)SerializerUtils.bytesToObject(Base64.getDecoder().decode(decodedMetadata));
 
                     //Update the metadata
-                    metadata.put(METADATA_VALID, String.valueOf(false));
+                    metadata.put(RedisSessionT8.METADATA_VALID, String.valueOf(false));
 
                     //Save metadata to Jedis
-                    byte[] encodedMetadata = Base64.getEncoder().encode(SerializationUtils.serialize(metadata));
+                    byte[] encodedMetadata = Base64.getEncoder().encode(SerializerUtils.objectToBytes(metadata));
                     jedis.set(session.getId() + REDIS_METADATA_KEY, encodedMetadata.toString());
 
                     return 0;
@@ -179,82 +185,6 @@ public class RedisSessionManagerT8 extends ManagerBase{
 
 
     //------------------------------------------------------------------------------------------------------------------
-    // START Utils
-    //------------------------------------------------------------------------------------------------------------------
-
-    /**
-     * Get session from metadata and attributes
-     * @param metadata
-     * @param attributes
-     * @return
-     */
-    private RedisSessionT8 getSession(Hashtable<String, Object> metadata, Hashtable<String, Object> attributes){
-        RedisSessionT8 session =  createEmptySession();
-
-        if(metadata.contains(METADATA_VALID)){
-            session.setValid(Boolean.valueOf((String) metadata.get(METADATA_VALID)));
-        }
-
-        try {
-            session.setCreationTime(DateFormatUtils.ISO_DATE_FORMAT.parse(((String) metadata.get(METADATA_CREATION_TIME))).getTime());
-        } catch (ParseException e) {
-            log.error("Error - Context: getSession." + e);
-        }
-
-        try {
-            session.setLastAccessedTime(DateFormatUtils.ISO_DATE_FORMAT.parse(((String) metadata.get(METADATA_LAST_ACCESS_TIME))).getTime());
-        } catch (ParseException e) {
-            log.error("Error - Context: getSession.", e);
-        }
-
-        if(metadata.contains(METADATA_MAX_INACTIVE_INTERVAL)){
-            session.setMaxInactiveInterval(Integer.valueOf((String) metadata.get(METADATA_MAX_INACTIVE_INTERVAL)));
-        }
-
-        for (Enumeration<String> enumerator = attributes.keys(); enumerator.hasMoreElements();) {
-            String key = enumerator.nextElement();
-            session.setAttribute(key, attributes.get(key));
-        }
-
-        return session;
-    }
-
-
-    /**
-     * Get metadata from a Session
-     * @param session
-     * @return
-     */
-    private Hashtable<String, Object> getMetadata(Session session){
-        Hashtable<String, Object> metadata = new Hashtable<>();
-        metadata.put(METADATA_VALID, String.valueOf(session.isValid()));
-        metadata.put(METADATA_CREATION_TIME, DateFormatUtils.ISO_DATE_FORMAT.format(new Date(session.getCreationTime())));
-        metadata.put(METADATA_LAST_ACCESS_TIME, DateFormatUtils.ISO_DATE_FORMAT.format(new Date(session.getLastAccessedTime())));
-        metadata.put(METADATA_MAX_INACTIVE_INTERVAL, String.valueOf(session.getMaxInactiveInterval()));
-        return metadata;
-    }
-
-    /**
-     * Get attributes from a Session
-     * @param session
-     * @return
-     */
-    private Hashtable<String, Object> getAttributes(Session session){
-        RedisSessionT8 redisSession = (RedisSessionT8)session;
-        Hashtable<String, Object> attributes = new Hashtable();
-        for (Enumeration<String> enumerator = redisSession.getAttributeNames(); enumerator.hasMoreElements();) {
-            String key = enumerator.nextElement();
-            attributes.put(key, redisSession.getAttribute(key));
-        }
-        return attributes;
-    }
-
-    //------------------------------------------------------------------------------------------------------------------
-    // END Utils
-    //------------------------------------------------------------------------------------------------------------------
-
-
-    //------------------------------------------------------------------------------------------------------------------
     // START REDIS
     //------------------------------------------------------------------------------------------------------------------
 
@@ -262,15 +192,15 @@ public class RedisSessionManagerT8 extends ManagerBase{
      * Method to saved session in redis
      * @param session
      */
-    protected void saveSession(Session session) throws Exception{
+    protected void saveSession(RedisSessionT8 session) throws Exception{
 
         //Get the session Id
         String id = session.getId();
-        Hashtable<String, Object> metadata = getMetadata(session);
-        Hashtable<String, Object> attributes = getAttributes(session);
+        Map<String, Object> metadata = RedisSessionT8.getMetadata(session);
+        Map<String, Object> attributes = session.getAttributes();
 
-        byte[] encodedMetadata = Base64.getEncoder().encode(SerializationUtils.serialize(metadata));
-        byte[] encodedAttributes = Base64.getEncoder().encode(SerializationUtils.serialize(attributes));
+        byte[] encodedMetadata = Base64.getEncoder().encode(SerializerUtils.objectToBytes(metadata));
+        byte[] encodedAttributes = Base64.getEncoder().encode(SerializerUtils.objectToBytes(attributes));
 
         withRedis(
                 (Jedis jedis)-> {
