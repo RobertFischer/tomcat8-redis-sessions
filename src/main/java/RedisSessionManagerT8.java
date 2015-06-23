@@ -175,7 +175,7 @@ public class RedisSessionManagerT8 extends ManagerBase{
     //------------------------------------------------------------------------------------------------------------------
 
     /**
-     * Method to saved session in redis
+     * Method to saved session in Redis
      * @param session
      */
     protected void saveSession(RedisSessionT8 session) throws Exception{

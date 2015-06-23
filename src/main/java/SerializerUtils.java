@@ -1,7 +1,7 @@
 import java.io.*;
 
 /**
- * Created by jorge.rojas on 6/23/2015.
+ * Created by Cesar Valverde on 6/23/2015.
  */
 public class SerializerUtils {
 
