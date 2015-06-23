@@ -101,7 +101,9 @@ public class RedisSessionManagerT8 extends ManagerBase{
      */
     @Override
     public Session findSession(String id) throws IOException {
-
+        if(Objects.isNull(id)){
+            return null;
+        }
         Hashtable<String, String> result = null;
         try {
             result = withRedis(
@@ -112,28 +114,17 @@ public class RedisSessionManagerT8 extends ManagerBase{
                     return r;
                 }
             );
+            try {
+                return RedisSessionT8.getSession(this, RedisSessionT8.getMapFromEncodedString(result.get(REDIS_METADATA_KEY)),
+                        RedisSessionT8.getMapFromEncodedString(result.get(REDIS_ATTRIBUTES_KEY)));
+            } catch (ClassNotFoundException e) {
+                log.error("Error - Context: findSession.", e);
+                return null;
+            }
         } catch (Exception e) {
             log.error("Error - Context: findSession.", e);
+            return null;
         }
-
-        Map<String, Object> metadata =
-                null;
-        try {
-            metadata = (Map)SerializerUtils.bytesToObject(Base64.getDecoder().decode(result.get(REDIS_METADATA_KEY)));
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        }
-
-        Map<String, Object> attributes =
-                null;
-        try {
-            attributes = (Map)SerializerUtils.bytesToObject(Base64.getDecoder().decode(result.get(REDIS_ATTRIBUTES_KEY)));
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        }
-
-        return RedisSessionT8.getSession(this, metadata, attributes);
-
     }
 
     @Override
@@ -143,34 +134,29 @@ public class RedisSessionManagerT8 extends ManagerBase{
 
     @Override
     public void remove(Session session, boolean update) {
-
         try {
             withRedis(
                 (Jedis jedis)-> {
 
-                    //Remove attributes
-                   jedis.del((session.getId() + REDIS_ATTRIBUTES_KEY));
+                    //Remove attributes from redis
+                    jedis.del((session.getId() + REDIS_ATTRIBUTES_KEY));
 
-                    //Get metadata from jedis
-                    String decodedMetadata = jedis.get((session.getId() + REDIS_METADATA_KEY));
-                    Hashtable<String, Object> metadata =
-                            (Hashtable)SerializerUtils.bytesToObject(Base64.getDecoder().decode(decodedMetadata));
+                    //Get encoded string metadata from Redis
+                    String encodedStringMetadata = jedis.get((session.getId() + REDIS_METADATA_KEY));
 
-                    //Update the metadata
+                    //Update the valid value in metadata to false
+                    Map<String, Object> metadata = RedisSessionT8.getMapFromEncodedString(encodedStringMetadata);
                     metadata.put(RedisSessionT8.METADATA_VALID, String.valueOf(false));
 
-                    //Save metadata to Jedis
-                    byte[] encodedMetadata = Base64.getEncoder().encode(SerializerUtils.objectToBytes(metadata));
-                    jedis.set(session.getId() + REDIS_METADATA_KEY, encodedMetadata.toString());
+                    //Update the metadata en Redis
+                    jedis.set(session.getId() + REDIS_METADATA_KEY, RedisSessionT8.getEncodedStringMetadata(metadata));
 
                     return 0;
-
                 }
             );
         } catch (Exception e) {
             log.error("Error - Context: remove." + e);
         }
-
     }
 
     @Override
@@ -193,21 +179,13 @@ public class RedisSessionManagerT8 extends ManagerBase{
      * @param session
      */
     protected void saveSession(RedisSessionT8 session) throws Exception{
-
-        //Get the session Id
-        String id = session.getId();
-        Map<String, Object> metadata = RedisSessionT8.getMetadata(session);
-        Map<String, Object> attributes = session.getAttributes();
-
-        byte[] encodedMetadata = Base64.getEncoder().encode(SerializerUtils.objectToBytes(metadata));
-        byte[] encodedAttributes = Base64.getEncoder().encode(SerializerUtils.objectToBytes(attributes));
-
         withRedis(
-                (Jedis jedis)-> {
-                    jedis.setex(id + REDIS_ATTRIBUTES_KEY, session.getMaxInactiveInterval(), encodedAttributes.toString());
-                    jedis.set(id + REDIS_METADATA_KEY, encodedMetadata.toString());
-                    return 0;
-                }
+            (Jedis jedis)-> {
+                jedis.setex(session.getId() + REDIS_ATTRIBUTES_KEY, session.getMaxInactiveInterval(),
+                        RedisSessionT8.getEncodedStringAttributes(session.getAttributes()));
+                jedis.set(session.getId() + REDIS_METADATA_KEY, RedisSessionT8.getEncodedStringMetadata(RedisSessionT8.getMetadata(session)));
+                return 0;
+            }
         );
     }
 

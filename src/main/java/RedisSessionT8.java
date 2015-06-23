@@ -5,6 +5,7 @@ import org.apache.commons.lang3.time.DateFormatUtils;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 
+import java.io.IOException;
 import java.util.*;
 
 /**
@@ -64,6 +65,18 @@ public class RedisSessionT8 extends StandardSession {
         metadata.put(METADATA_LAST_ACCESS_TIME, DateFormatUtils.ISO_DATE_FORMAT.format(new Date(session.getLastAccessedTime())));
         metadata.put(METADATA_MAX_INACTIVE_INTERVAL, String.valueOf(session.getMaxInactiveInterval()));
         return metadata;
+    }
+
+    public static String getEncodedStringMetadata(Map<String, Object> metadata) throws IOException {
+        return Base64.getEncoder().encodeToString(SerializerUtils.objectToBytes(metadata));
+    }
+
+    public static String getEncodedStringAttributes(Map<String, Object> attributes) throws IOException {
+        return new String(Base64.getEncoder().encodeToString(SerializerUtils.objectToBytes(attributes)));
+    }
+
+    public static Map<String, Object> getMapFromEncodedString(String encodedString) throws IOException, ClassNotFoundException {
+        return (Map<String, Object>) SerializerUtils.bytesToObject(Base64.getDecoder().decode(encodedString));
     }
 
     /**
