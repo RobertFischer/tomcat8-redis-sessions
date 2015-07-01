@@ -86,7 +86,7 @@ public class RedisBackedPropertySupport<U> {
         String valueToStore = Optional.ofNullable(value).map(toString).orElse(null);
         if (valueToStore == null) {
           client.withRedis(this::doClear);
-        } else if (oldValue != null && !oldValue.equals(value)) {
+        } else if (!Objects.equals(oldValue, value)) {
           client.withRedis(jedis -> {
             doStore(jedis, valueToStore);
           });

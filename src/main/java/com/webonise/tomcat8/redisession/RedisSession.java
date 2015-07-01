@@ -3,10 +3,14 @@ package com.webonise.tomcat8.redisession;
 import com.webonise.tomcat8.redisession.redisclient.*;
 import org.apache.catalina.Session;
 import org.apache.catalina.session.StandardSession;
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
 
 import java.io.Serializable;
 import java.security.Principal;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.function.*;
 
 /**
@@ -14,17 +18,22 @@ import java.util.function.*;
  */
 public class RedisSession extends StandardSession implements Session {
 
+  private static final Log log = LogFactory.getLog(RedisSession.class);
+
   private volatile RedisHashBackedPropertySupport<String> authProperty;
   private volatile RedisHashBackedPropertySupport<Long> creationTimeProperty;
   private volatile RedisHashBackedPropertySupport<Long> thisAccessedTimeProperty;
   private volatile RedisHashBackedPropertySupport<Long> lastAccessedTimeProperty;
   private volatile RedisHashBackedPropertySupport<Integer> maxInactiveIntervalProperty;
   private volatile RedisHashBackedPropertySupport<Serializable> principalProperty;
+  private volatile Map<String, RedisHashBackedPropertySupport<Serializable>> attributesProperties;
+  private volatile RedisHashBackedPropertySupport<Boolean> isValidProperty;
 
   protected void initProperties() {
     Redis redis = getRedis();
     String metadataKey = getMetadataKey();
-    String attributesKey = getAttributesKey();
+
+    attributesProperties = new ConcurrentSkipListMap<>();
 
     authProperty = new RedisHashBackedPropertySupport<>(
                                                            redis, metadataKey,
@@ -66,6 +75,13 @@ public class RedisSession extends StandardSession implements Session {
                                                                 Convention.PRINCIPAL_HKEY,
                                                                 new SerializableConverter<>(),
                                                                 principal -> this.principal = (Principal) principal
+    );
+
+    isValidProperty = new RedisHashBackedPropertySupport<>(
+                                                              redis, metadataKey,
+                                                              Convention.IS_VALID_HKEY,
+                                                              new BooleanConverter(),
+                                                              newValue -> this.isValid = newValue
     );
   }
 
@@ -252,7 +268,9 @@ public class RedisSession extends StandardSession implements Session {
     super.setMaxInactiveInterval(interval);
   }
 
-  protected abstract void triggerMaxInactiveIntervalStore(Integer interval);
+  protected void triggerMaxInactiveIntervalStore(Integer interval) {
+    storeProperty("maxInactiveInterval", maxInactiveIntervalProperty, interval);
+  }
 
   /**
    * Return the authenticated Principal that is associated with this Session.
@@ -267,7 +285,9 @@ public class RedisSession extends StandardSession implements Session {
     return super.getPrincipal();
   }
 
-  protected abstract void triggerPrincipalLoad();
+  protected void triggerPrincipalLoad() {
+    triggerProperty("principal", principalProperty);
+  }
 
   /**
    * Set the authenticated Principal that is associated with this Session.
@@ -284,11 +304,13 @@ public class RedisSession extends StandardSession implements Session {
         throw new IllegalArgumentException("Need a serializable Principal for Redis storage, but found " + principal.getClass());
       }
     }
-    triggerPrincipalStore(principal);
+    triggerPrincipalStore((Serializable) principal);
     super.setPrincipal(principal);
   }
 
-  protected abstract void triggerPrincipalStore(Principal principal);
+  protected void triggerPrincipalStore(Serializable principal) {
+    storeProperty("principal", principalProperty, principal);
+  }
 
   /**
    * Release all object references, and initialize instance variables, in
@@ -296,11 +318,13 @@ public class RedisSession extends StandardSession implements Session {
    */
   @Override
   public void recycle() {
-    triggerAuthTypeStore(null);
-    triggerCreationTimeStore(null);
-    triggerMaxInactiveIntervalStore(null);
-    triggerPrincipalStore(null);
+    String oldId = getId();
     super.recycle();
+    String newId = getId();
+    if (newId == null || Objects.equals(oldId, newId)) {
+      getManager().changeSessionId(this);
+    }
+    initProperties();
   }
 
   /**
@@ -316,7 +340,9 @@ public class RedisSession extends StandardSession implements Session {
     return super.getCreationTime();
   }
 
-  protected abstract void triggerCreationTimeLoad();
+  protected void triggerCreationTimeLoad() {
+    creationTimeProperty.trigger();
+  }
 
   /**
    * Return the time when this session was created, in milliseconds since
@@ -342,7 +368,24 @@ public class RedisSession extends StandardSession implements Session {
     return super.getAttribute(name);
   }
 
-  protected abstract void triggerAttributeLoad(String name);
+  protected void triggerAttributeLoad(String name) {
+    attributesProperties.computeIfAbsent(name, this::makeAttributeProperty).trigger();
+  }
+
+  protected RedisHashBackedPropertySupport<Serializable> makeAttributeProperty(String name) {
+    Redis redis = getRedis();
+    String redisKey = getAttributesKey();
+    String hashKey = name;
+    RedisConverter<Serializable> converter = new SerializableConverter<>();
+    Consumer<Serializable> setter = value -> this.attributes.put(name, value);
+    return
+        new RedisHashBackedPropertySupport<>(
+                                                redis,
+                                                redisKey, hashKey,
+                                                converter,
+                                                setter
+        );
+  }
 
   /**
    * Return an <code>Enumeration</code> of <code>String</code> objects
@@ -362,7 +405,17 @@ public class RedisSession extends StandardSession implements Session {
    *
    * @return The attribute names; never {@code null}.
    */
-  protected abstract SortedSet<String> fetchAttributeNames();
+  protected SortedSet<String> fetchAttributeNames() {
+    try {
+      Set<String> names = getRedis().withRedis(jedis -> {
+        return jedis.hkeys(getAttributesKey());
+      });
+      return new TreeSet<>(names);
+    } catch (Exception e) {
+      log.error("Could not retrieve attribute names; using empty set", e);
+      return Collections.emptySortedSet();
+    }
+  }
 
   /**
    * Invalidates this session and unbinds any objects bound to it.
@@ -376,7 +429,9 @@ public class RedisSession extends StandardSession implements Session {
     doRedisInvalidation();
   }
 
-  protected abstract void doRedisInvalidation();
+  protected void doRedisInvalidation() {
+    getManager().invalidateSession(getIdInternal());
+  }
 
   /**
    * Remove the object bound with the specified name from this session.  If
@@ -397,7 +452,16 @@ public class RedisSession extends StandardSession implements Session {
     super.removeAttribute(name);
   }
 
-  protected abstract void doRemoveAttribute(String name);
+  protected void doRemoveAttribute(String name) {
+    try {
+      getRedis().withRedis(jedis -> {
+        jedis.hdel(getAttributesKey(), name);
+      });
+      attributesProperties.remove(name);
+    } catch (Exception e) {
+      log.error("Could not remove attribute from " + getIdInternal() + " for name " + name, e);
+    }
+  }
 
   /**
    * Remove the object bound with the specified name from this session.  If
@@ -447,7 +511,9 @@ public class RedisSession extends StandardSession implements Session {
     super.setAttribute(name, value);
   }
 
-  protected abstract void triggerAttributeStore(String name, Serializable value);
+  protected void triggerAttributeStore(String name, Serializable value) {
+    attributesProperties.computeIfAbsent(name, this::makeAttributeProperty).store(value);
+  }
 
   /**
    * Bind an object to this session, using the specified name.  If an object
@@ -484,7 +550,7 @@ public class RedisSession extends StandardSession implements Session {
    */
   @Override
   protected String[] keys() {
-    return fetchAttributeNames().toArray(new String[0]);
+    return fetchAttributeNames().toArray(ArrayUtils.EMPTY_STRING_ARRAY);
   }
 
   /**
@@ -515,7 +581,9 @@ public class RedisSession extends StandardSession implements Session {
     return super.isValidInternal();
   }
 
-  protected abstract void triggerIsValidLoad();
+  protected void triggerIsValidLoad() {
+    isValidProperty.trigger();
+  }
 
   /**
    * Check whether the Object can be distributed. This implementation
@@ -533,25 +601,6 @@ public class RedisSession extends StandardSession implements Session {
   }
 
   /**
-   * Inform the listeners about the change session ID.
-   *
-   * @param newId                    new session ID
-   * @param oldId                    old session ID
-   * @param notifySessionListeners   Should any associated sessionListeners be
-   *                                 notified that session ID has been changed?
-   * @param notifyContainerListeners Should any associated ContainerListeners
-   */
-  @Override
-  public void tellChangedSessionId(String newId, String oldId, boolean notifySessionListeners, boolean notifyContainerListeners) {
-    doChangeSessionId(oldId, newId);
-    super.tellChangedSessionId(newId, oldId, notifySessionListeners, notifyContainerListeners);
-  }
-
-  protected void doChangeSessionId(String oldId, String newId) {
-    initProperties();
-  }
-
-  /**
    * Set the <code>isValid</code> flag for this session.
    *
    * @param isValid The new value for the <code>isValid</code> flag
@@ -562,7 +611,9 @@ public class RedisSession extends StandardSession implements Session {
     super.setValid(isValid);
   }
 
-  protected abstract void triggerIsValidStore(boolean isValid);
+  protected void triggerIsValidStore(boolean isValid) {
+    isValidProperty.store(isValid);
+  }
 
   /**
    * Return the <code>isValid</code> flag for this session.
