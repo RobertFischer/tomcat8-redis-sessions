@@ -29,6 +29,28 @@ public class RedisSession extends StandardSession implements Session {
   private volatile Map<String, RedisHashBackedPropertySupport<Serializable>> attributesProperties;
   private volatile RedisHashBackedPropertySupport<Boolean> isValidProperty;
 
+  public RedisSession(RedisSessionManager manager, String id) {
+    super(manager);
+    Objects.requireNonNull(manager, "manager responsible for this session");
+    Objects.requireNonNull(manager.getRedis(), "Redis client for this session");
+    Objects.requireNonNull(id, "the initial id for this session");
+    this.id = id;
+  }
+
+  protected static void triggerProperty(String name, RedisBackedPropertySupport<?> property) {
+    if (property == null) {
+      throw new IllegalStateException("Property is not initialized for " + name);
+    }
+    property.trigger();
+  }
+
+  protected static <T> void storeProperty(String name, RedisBackedPropertySupport<T> property, T value) {
+    if (property == null) {
+      throw new IllegalStateException("Property is not initialized for " + name);
+    }
+    property.store(value);
+  }
+
   protected void initProperties() {
     Redis redis = getRedis();
     String metadataKey = getMetadataKey();
@@ -103,13 +125,6 @@ public class RedisSession extends StandardSession implements Session {
     return getKey("metadata", Convention::sessionIdToMetadataKey);
   }
 
-
-  public RedisSession(RedisSessionManager manager) {
-    super(manager);
-    Objects.requireNonNull(manager, "manager responsible for this session");
-    Objects.requireNonNull(manager.getRedis(), "Redis client for this session");
-  }
-
   /**
    * Provides direct access to the Redis client.
    *
@@ -134,24 +149,6 @@ public class RedisSession extends StandardSession implements Session {
     return super.getAuthType();
   }
 
-  protected static void triggerProperty(String name, RedisBackedPropertySupport<?> property) {
-    if (property == null) {
-      throw new IllegalStateException("Property is not initialized for " + name);
-    }
-    property.trigger();
-  }
-
-  protected static <T> void storeProperty(String name, RedisBackedPropertySupport<T> property, T value) {
-    if (property == null) {
-      throw new IllegalStateException("Property is not initialized for " + name);
-    }
-    property.store(value);
-  }
-
-  protected void triggerAuthTypeLoad() {
-    triggerProperty("authType", authProperty);
-  }
-
   /**
    * Set the authentication type used to authenticate our cached
    * Principal, if any.
@@ -164,20 +161,12 @@ public class RedisSession extends StandardSession implements Session {
     super.setAuthType(authType);
   }
 
-  protected void triggerAuthTypeStore(String authType) {
-    storeProperty("authType", authProperty, authType);
+  protected void triggerAuthTypeLoad() {
+    triggerProperty("authType", authProperty);
   }
 
-  /**
-   * Set the creation time for this session.  This method is called by the
-   * Manager when an existing Session instance is reused.
-   *
-   * @param time The new creation time
-   */
-  @Override
-  public void setCreationTime(long time) {
-    triggerCreationTimeStore(time);
-    super.setCreationTime(time);
+  protected void triggerAuthTypeStore(String authType) {
+    storeProperty("authType", authProperty, authType);
   }
 
   protected void triggerCreationTimeStore(Long time) {
@@ -251,10 +240,6 @@ public class RedisSession extends StandardSession implements Session {
     return super.getMaxInactiveInterval();
   }
 
-  protected void triggerMaxInactiveIntervalLoad() {
-    triggerProperty("maxInactiveInterval", maxInactiveIntervalProperty);
-  }
-
   /**
    * Set the maximum time interval, in seconds, between client requests
    * before the servlet container will invalidate the session.  A zero or
@@ -266,6 +251,10 @@ public class RedisSession extends StandardSession implements Session {
   public void setMaxInactiveInterval(int interval) {
     triggerMaxInactiveIntervalStore(interval);
     super.setMaxInactiveInterval(interval);
+  }
+
+  protected void triggerMaxInactiveIntervalLoad() {
+    triggerProperty("maxInactiveInterval", maxInactiveIntervalProperty);
   }
 
   protected void triggerMaxInactiveIntervalStore(Integer interval) {
@@ -285,10 +274,6 @@ public class RedisSession extends StandardSession implements Session {
     return super.getPrincipal();
   }
 
-  protected void triggerPrincipalLoad() {
-    triggerProperty("principal", principalProperty);
-  }
-
   /**
    * Set the authenticated Principal that is associated with this Session.
    * This provides an <code>Authenticator</code> with a means to cache a
@@ -306,6 +291,10 @@ public class RedisSession extends StandardSession implements Session {
     }
     triggerPrincipalStore((Serializable) principal);
     super.setPrincipal(principal);
+  }
+
+  protected void triggerPrincipalLoad() {
+    triggerProperty("principal", principalProperty);
   }
 
   protected void triggerPrincipalStore(Serializable principal) {
@@ -338,6 +327,18 @@ public class RedisSession extends StandardSession implements Session {
   public long getCreationTime() {
     triggerCreationTimeLoad();
     return super.getCreationTime();
+  }
+
+  /**
+   * Set the creation time for this session.  This method is called by the
+   * Manager when an existing Session instance is reused.
+   *
+   * @param time The new creation time
+   */
+  @Override
+  public void setCreationTime(long time) {
+    triggerCreationTimeStore(time);
+    super.setCreationTime(time);
   }
 
   protected void triggerCreationTimeLoad() {
@@ -600,17 +601,6 @@ public class RedisSession extends StandardSession implements Session {
     return true;
   }
 
-  /**
-   * Set the <code>isValid</code> flag for this session.
-   *
-   * @param isValid The new value for the <code>isValid</code> flag
-   */
-  @Override
-  public void setValid(boolean isValid) {
-    triggerIsValidStore(isValid);
-    super.setValid(isValid);
-  }
-
   protected void triggerIsValidStore(boolean isValid) {
     isValidProperty.store(isValid);
   }
@@ -622,6 +612,17 @@ public class RedisSession extends StandardSession implements Session {
   public boolean isValid() {
     triggerIsValidLoad();
     return super.isValid();
+  }
+
+  /**
+   * Set the <code>isValid</code> flag for this session.
+   *
+   * @param isValid The new value for the <code>isValid</code> flag
+   */
+  @Override
+  public void setValid(boolean isValid) {
+    triggerIsValidStore(isValid);
+    super.setValid(isValid);
   }
 
   /**

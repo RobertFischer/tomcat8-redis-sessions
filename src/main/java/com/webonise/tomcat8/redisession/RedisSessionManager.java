@@ -497,7 +497,9 @@ public class RedisSessionManager implements Manager {
    */
   @Override
   public void add(Session session) {
-    // TODO Add a session
+    if (session == null || session instanceof RedisSession) return;
+    throw new IllegalArgumentException("This manager only supports RedisSession");
+    // TODO Maybe clone the session into Redis?
   }
 
   /**
@@ -555,9 +557,8 @@ public class RedisSessionManager implements Manager {
    * because it reads it from the Store.
    */
   @Override
-  public Session createEmptySession() {
-    // TODO Implement creating an empty session
-    return null;
+  public RedisSession createEmptySession() {
+    return createSession(null);
   }
 
   /**
@@ -575,15 +576,12 @@ public class RedisSessionManager implements Manager {
    *                               instantiated for any reason
    */
   @Override
-  public Session createSession(String sessionId) {
+  public RedisSession createSession(String sessionId) {
     if (sessionId == null) {
       Objects.requireNonNull(this.sessionIdGenerator, "session id generator");
-      return createSession(this.sessionIdGenerator.generateSessionId());
+      sessionId = this.sessionIdGenerator.generateSessionId();
     }
-
-    Session session = createEmptySession(); // TODO Change type to being our type
-    // TODO populate relevant session data
-    return null;
+    return new RedisSession(this, sessionId);
   }
 
   /**
@@ -597,9 +595,20 @@ public class RedisSessionManager implements Manager {
    *                               processing this request
    */
   @Override
-  public Session findSession(String id) throws IOException {
-    // TODO Implement retrieving a session
-    return null;
+  public RedisSession findSession(String id) throws IOException {
+    try {
+      boolean found = redis.withRedis(jedis -> {
+        return jedis.exists(Convention.sessionIdToMetadataKey(id));
+      });
+      if (!found) return null;
+      RedisSession session = new RedisSession(this, id);
+      boolean isValid = session.isValidInternal();
+      if (!isValid) return null;
+      return session;
+    } catch (Exception e) {
+      LOG.error("Could not retrieve session for id " + id, e);
+      return null;
+    }
   }
 
   /**
@@ -623,6 +632,7 @@ public class RedisSessionManager implements Manager {
       return new Session[0];
     }
   }
+
 
   /**
    * Load any currently active sessions that were previously unloaded
@@ -758,7 +768,7 @@ public class RedisSessionManager implements Manager {
       Optional<Long> result =
           createMetadataKeyStream()
               .map(this::getSessionAliveTime)
-              .max(Comparator.<Long>naturalOrder());
+              .max(Comparator.naturalOrder());
       Long maxAliveTime = result.orElse(null);
       if (maxAliveTime == null) return 0;
       maxAliveTime = TimeUnit.MILLISECONDS.toSeconds(maxAliveTime);
