@@ -889,20 +889,23 @@ public class RedisSessionManager implements Manager {
 
   protected Stream<String> createValidSessionIdStream() throws Exception {
     cleanSessions();
-    return createAttributesKeyStream().map(Convention::attributesKeyToSessionId).filter(this::getSessionValidity);
+    return createSessionIdStreamWithValidityFilter(true);
   }
 
   protected Stream<String> createExpiredSessionIdStream() throws Exception {
-    return
-        createMetadataKeyStream()
-            .map(Convention::metadataKeyToSessionId)
-            .filter(sessionId -> !getSessionValidity(sessionId));
+    return createSessionIdStreamWithValidityFilter(false);
+  }
+
+  protected Stream<String> createSessionIdStreamWithValidityFilter(boolean valid) throws Exception {
+    Predicate<String> validityTest = this::getSessionValidity;
+    if (!valid) validityTest = validityTest.negate();
+    return createSessionIdStream().filter(validityTest);
   }
 
   protected int countCurrentActiveSessions() {
     try {
       long count = createValidSessionIdStream().distinct().count();
-      return (int) Math.max(Integer.MAX_VALUE, count);
+      return (int) Math.min(Integer.MAX_VALUE, count);
     } catch (Exception e) {
       LOG.error("Could not calculate max active; returning 0", e);
       return 0;
