@@ -779,15 +779,15 @@ public class RedisSessionManager implements Manager {
     }
   }
 
-  protected void doInBackground(Procedure action) {
-    ForkJoinPool.commonPool().submit(() -> {
+  protected ForkJoinTask<Void> doInBackground(Procedure action) {
+    return ForkJoinPool.commonPool().submit(() -> {
       action.apply();
       return null;
     });
   }
 
-  protected void doInBackground(Supplier<?> action) {
-    ForkJoinPool.commonPool().submit(action::get);
+  protected <T> ForkJoinTask<T> doInBackground(Supplier<T> action) {
+    return ForkJoinPool.commonPool().submit(action::get);
   }
 
   protected long countCurrentExpiredSessions() {
@@ -910,6 +910,22 @@ public class RedisSessionManager implements Manager {
       LOG.error("Could not calculate max active; returning 0", e);
       return 0;
     }
+  }
+
+  public void autovivifySession(String sessionId) {
+    Objects.requireNonNull(sessionId, "session id to autovivify");
+    String metadataId = Convention.sessionIdToMetadataKey(sessionId);
+    String dateString = Convention.stringFromDate(new Date());
+
+    // Do this work simultaneously, but ensure it's done before we exit the method
+    Stream.<Redis.RedisConsumer>of(
+                                      jedis -> {
+                                        jedis.hsetnx(metadataId, Convention.CREATION_TIME_HKEY, dateString);
+                                      },
+                                      jedis -> {
+                                        jedis.hset(metadataId, Convention.LAST_ACCESS_TIME_HKEY, dateString);
+                                      }
+    ).map(consumer -> doInBackground(() -> redis.withRedis(consumer))).forEach(ForkJoinTask::join);
   }
 
   private interface Procedure {

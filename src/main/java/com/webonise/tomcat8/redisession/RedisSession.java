@@ -36,6 +36,7 @@ public class RedisSession extends StandardSession implements Session {
     Objects.requireNonNull(id, "the initial id for this session");
     this.id = id;
     initProperties();
+    manager.autovivifySession(id);
   }
 
   protected static void triggerProperty(String name, RedisBackedPropertySupport<?> property) {
@@ -85,7 +86,6 @@ public class RedisSession extends StandardSession implements Session {
                                                                        new TimestampConverter(Date::new),
                                                                        time -> this.lastAccessedTime = time
     );
-    lastAccessedTimeProperty.store(System.currentTimeMillis());
 
     maxInactiveIntervalProperty = new RedisHashBackedPropertySupport<>(
                                                                           redis, metadataKey,
