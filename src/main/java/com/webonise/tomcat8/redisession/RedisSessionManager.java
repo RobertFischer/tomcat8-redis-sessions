@@ -1,5 +1,6 @@
 package com.webonise.tomcat8.redisession;
 
+import com.webonise.tomcat8.redisession.redisclient.BooleanConverter;
 import com.webonise.tomcat8.redisession.redisclient.Redis;
 import org.apache.catalina.*;
 import org.apache.catalina.util.StandardSessionIdGenerator;
@@ -273,7 +274,7 @@ public class RedisSessionManager implements Manager {
       redis.withRedis(jedis -> {
         // Ordering is significant: invalid requires expired time to be set, and deleting attributes requires invalid
         jedis.hset(metadataKey, Convention.EXPIRED_TIME_HKEY, Convention.stringFromDate(new Date()));
-        jedis.hset(metadataKey, Convention.IS_VALID_HKEY, Boolean.FALSE.toString());
+        jedis.hset(metadataKey, Convention.IS_VALID_HKEY, new BooleanConverter().convertToString(false));
         jedis.del(Convention.sessionIdToAttributesKey(sessionid));
       });
     } catch (Exception e) {
@@ -845,8 +846,7 @@ public class RedisSessionManager implements Manager {
       String validityString = redis.withRedis(jedis -> {
         return jedis.hget(metadataKey, Convention.IS_VALID_HKEY);
       });
-      if (validityString == null || validityString.isEmpty()) return false;
-      return Boolean.valueOf(validityString);
+      return new BooleanConverter().convertFromString(validityString);
     } catch (Exception e) {
       LOG.error("Error while determining session validity for " + sessionId +
                     "; returning invalid", e
@@ -916,9 +916,13 @@ public class RedisSessionManager implements Manager {
     Objects.requireNonNull(sessionId, "session id to autovivify");
     String metadataId = Convention.sessionIdToMetadataKey(sessionId);
     String dateString = Convention.stringFromDate(new Date());
+    String isValidString = new BooleanConverter().convertToString(true);
 
     // Do this work simultaneously, but ensure it's done before we exit the method
     Stream.<Redis.RedisConsumer>of(
+                                      jedis -> {
+                                        jedis.hsetnx(metadataId, Convention.IS_VALID_HKEY, isValidString);
+                                      },
                                       jedis -> {
                                         jedis.hsetnx(metadataId, Convention.CREATION_TIME_HKEY, dateString);
                                       },
