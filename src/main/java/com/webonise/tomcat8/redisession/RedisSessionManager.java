@@ -674,8 +674,10 @@ public class RedisSessionManager implements Manager {
 
     if (update) {
       try {
-        setSessionExpireRate(calculateSessionExpireRate());
-        setExpiredSessions(countCurrentExpiredSessions());
+        doAllInBackground(
+                             () -> setSessionExpireRate(calculateSessionExpireRate()),
+                             () -> setExpiredSessions(countCurrentExpiredSessions())
+        ).forEach(ForkJoinTask::join);
       } catch (Exception e) {
         throw new RuntimeException("Could not update the expiration statistics", e);
       }
@@ -704,6 +706,10 @@ public class RedisSessionManager implements Manager {
     // DO NOTHING
   }
 
+  public List<ForkJoinTask<Void>> doAllInBackground(Procedure... procedures) {
+    return Arrays.asList(procedures).parallelStream().map(this::doInBackground).collect(Collectors.toList());
+  }
+
   /**
    * This method will be invoked by the context/container on a periodic
    * basis and allows the manager to implement
@@ -711,26 +717,17 @@ public class RedisSessionManager implements Manager {
    */
   @Override
   public void backgroundProcess() {
-    doInBackground(this::cleanSessions);
-    doInBackground(() -> {
-      setActiveSessions(countCurrentActiveSessions());
-    });
-    doInBackground(() -> {
-      setExpiredSessions(countCurrentExpiredSessions());
-    });
-    doInBackground(() -> {
-      setSessionMaxAliveTime(calculateSessionMaxAliveTime());
-    });
-    doInBackground(() -> {
-      setSessionAverageAliveTime(calculateSessionAverageAliveTime());
-    });
-    doInBackground(() -> {
-      setSessionCreateRate(calculateSessionCreateRate());
-    });
-    doInBackground(() -> {
-      setSessionExpireRate(calculateSessionExpireRate());
-    });
+    doAllInBackground(
+                         this::cleanSessions,
+                         () -> setActiveSessions(countCurrentActiveSessions()),
+                         () -> setExpiredSessions(countCurrentExpiredSessions()),
+                         () -> setSessionMaxAliveTime(calculateSessionMaxAliveTime()),
+                         () -> setSessionAverageAliveTime(calculateSessionAverageAliveTime()),
+                         () -> setSessionCreateRate(calculateSessionCreateRate()),
+                         () -> setSessionExpireRate(calculateSessionExpireRate())
+    );
   }
+
 
   /**
    * Returns the session average alive time in seconds.
