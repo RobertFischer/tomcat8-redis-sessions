@@ -15,5 +15,6 @@ dependencies {
   compile 'org.apache.commons:commons-pool2:[2.4.1,2.5)'
   compile 'org.apache.tomcat:tomcat-catalina:[8.0.23,8.1)'
   compile 'org.apache.tomcat:tomcat-servlet-api:[8.0.23,8.1)'
+  compile 'junit:junit:4.12'
 }
 

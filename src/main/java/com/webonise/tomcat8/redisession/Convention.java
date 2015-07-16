@@ -24,7 +24,7 @@ public class Convention {
   private static final String SESSION_PREFIX = "TOMCAT_SESSION" + KEY_DELIMITER;
   private static final String METADATA_SUFFIX = "" + KEY_DELIMITER + "metadata";
   private static final String ATTRIBUTES_SUFFIX = "" + KEY_DELIMITER + "attributes";
-  private static final FastDateFormat DATE_FORMAT = DateFormatUtils.ISO_DATE_TIME_ZONE_FORMAT;
+  private static final FastDateFormat DATE_FORMAT = DateFormatUtils.ISO_DATETIME_TIME_ZONE_FORMAT;
 
   /**
    * The pattern for {@code SCAN} that will select session attribute keys.

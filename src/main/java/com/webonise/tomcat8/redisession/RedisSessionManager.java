@@ -1,10 +1,16 @@
 package com.webonise.tomcat8.redisession;
 
+import com.webonise.tomcat8.redisession.redisclient.BooleanConverter;
 import com.webonise.tomcat8.redisession.redisclient.Redis;
+
 import org.apache.catalina.*;
+import org.apache.catalina.util.LifecycleMBeanBase;
 import org.apache.catalina.util.StandardSessionIdGenerator;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
+
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.Protocol;
 import redis.clients.jedis.ScanParams;
 
 import java.beans.PropertyChangeListener;
@@ -16,20 +22,39 @@ import java.util.concurrent.atomic.*;
 import java.util.function.*;
 import java.util.stream.*;
 
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+
+
+
+
+
+
+
 /**
  * Responsible for creating sessions that persist into Redis.
  */
-public class RedisSessionManager implements Manager {
+public class RedisSessionManager extends LifecycleMBeanBase implements Manager {
 
   private static final Log LOG = LogFactory.getLog(RedisSessionManager.class);
   private final AtomicLong sessionCounter = new AtomicLong(0L);
   private final PropertyChangeSupport changeListeners = new PropertyChangeSupport(this);
-  private final Redis redis = new Redis(); // TODO Allow this to be populated from XML config
+  private  Redis redis ; // TODO Allow this to be populated from XML config
   private volatile Context context;
   private volatile boolean distributable = true;
-  private volatile int getMaxInactiveInterval = (int) TimeUnit.HOURS.toSeconds(1L);
+  private volatile int maxInactiveInterval = (int) TimeUnit.HOURS.toSeconds(1L);
   private volatile SessionIdGenerator sessionIdGenerator = new StandardSessionIdGenerator();
-
+  protected String host = Protocol.DEFAULT_HOST;
+  protected int port = Protocol.DEFAULT_PORT;
+  protected int database = Protocol.DEFAULT_DATABASE;
+  protected String password = null;
+  protected int timeout = Protocol.DEFAULT_TIMEOUT;
+  
+public RedisSessionManager() {
+	
+}
+  
+  
   public Redis getRedis() {
     return redis;
   }
@@ -105,7 +130,7 @@ public class RedisSessionManager implements Manager {
    */
   @Override
   public int getMaxInactiveInterval() {
-    return this.getMaxInactiveInterval;
+    return this.maxInactiveInterval;
   }
 
   /**
@@ -119,7 +144,7 @@ public class RedisSessionManager implements Manager {
     if (interval <= 0) {
       throw new IllegalArgumentException("Interval must be greater than 0; was " + interval);
     }
-    this.getMaxInactiveInterval = interval;
+    this.maxInactiveInterval = interval;
   }
 
   /**
@@ -273,7 +298,7 @@ public class RedisSessionManager implements Manager {
       redis.withRedis(jedis -> {
         // Ordering is significant: invalid requires expired time to be set, and deleting attributes requires invalid
         jedis.hset(metadataKey, Convention.EXPIRED_TIME_HKEY, Convention.stringFromDate(new Date()));
-        jedis.hset(metadataKey, Convention.IS_VALID_HKEY, Boolean.FALSE.toString());
+        jedis.hset(metadataKey, Convention.IS_VALID_HKEY, new BooleanConverter().convertToString(false));
         jedis.del(Convention.sessionIdToAttributesKey(sessionid));
       });
     } catch (Exception e) {
@@ -673,8 +698,10 @@ public class RedisSessionManager implements Manager {
 
     if (update) {
       try {
-        setSessionExpireRate(calculateSessionExpireRate());
-        setExpiredSessions(countCurrentExpiredSessions());
+        doAllInBackground(
+                             () -> setSessionExpireRate(calculateSessionExpireRate()),
+                             () -> setExpiredSessions(countCurrentExpiredSessions())
+        ).forEach(ForkJoinTask::join);
       } catch (Exception e) {
         throw new RuntimeException("Could not update the expiration statistics", e);
       }
@@ -703,6 +730,10 @@ public class RedisSessionManager implements Manager {
     // DO NOTHING
   }
 
+  public List<ForkJoinTask<Void>> doAllInBackground(Procedure... procedures) {
+    return Arrays.asList(procedures).parallelStream().map(this::doInBackground).collect(Collectors.toList());
+  }
+
   /**
    * This method will be invoked by the context/container on a periodic
    * basis and allows the manager to implement
@@ -710,26 +741,17 @@ public class RedisSessionManager implements Manager {
    */
   @Override
   public void backgroundProcess() {
-    doInBackground(this::cleanSessions);
-    doInBackground(() -> {
-      setActiveSessions(countCurrentActiveSessions());
-    });
-    doInBackground(() -> {
-      setExpiredSessions(countCurrentExpiredSessions());
-    });
-    doInBackground(() -> {
-      setSessionMaxAliveTime(calculateSessionMaxAliveTime());
-    });
-    doInBackground(() -> {
-      setSessionAverageAliveTime(calculateSessionAverageAliveTime());
-    });
-    doInBackground(() -> {
-      setSessionCreateRate(calculateSessionCreateRate());
-    });
-    doInBackground(() -> {
-      setSessionExpireRate(calculateSessionExpireRate());
-    });
+    doAllInBackground(
+                         this::cleanSessions,
+                         () -> setActiveSessions(countCurrentActiveSessions()),
+                         () -> setExpiredSessions(countCurrentExpiredSessions()),
+                         () -> setSessionMaxAliveTime(calculateSessionMaxAliveTime()),
+                         () -> setSessionAverageAliveTime(calculateSessionAverageAliveTime()),
+                         () -> setSessionCreateRate(calculateSessionCreateRate()),
+                         () -> setSessionExpireRate(calculateSessionExpireRate())
+    );
   }
+
 
   /**
    * Returns the session average alive time in seconds.
@@ -779,15 +801,15 @@ public class RedisSessionManager implements Manager {
     }
   }
 
-  protected void doInBackground(Procedure action) {
-    ForkJoinPool.commonPool().submit(() -> {
+  protected ForkJoinTask<Void> doInBackground(Procedure action) {
+    return ForkJoinPool.commonPool().submit(() -> {
       action.apply();
       return null;
     });
   }
 
-  protected void doInBackground(Supplier<?> action) {
-    ForkJoinPool.commonPool().submit(action::get);
+  protected <T> ForkJoinTask<T> doInBackground(Supplier<T> action) {
+    return ForkJoinPool.commonPool().submit(action::get);
   }
 
   protected long countCurrentExpiredSessions() {
@@ -830,8 +852,10 @@ public class RedisSessionManager implements Manager {
         return defaultDate;
       }
       long maxInactiveInterval = Long.parseLong(maxInactiveIntervalString);
-
-      return new Date(lastAccessTime.getTime() + maxInactiveInterval);
+      	/**
+      	 * If the maxInactiveInterval is given in seconds we should multiply by 1000 to convert into millis.
+      	 */
+      return new Date(lastAccessTime.getTime() + (maxInactiveInterval*1000));
     } catch (Exception e) {
       LOG.error("Error while determining the session expiration date for " + sessionId + "; returning " + defaultDate, e);
       return defaultDate;
@@ -845,8 +869,7 @@ public class RedisSessionManager implements Manager {
       String validityString = redis.withRedis(jedis -> {
         return jedis.hget(metadataKey, Convention.IS_VALID_HKEY);
       });
-      if (validityString == null || validityString.isEmpty()) return false;
-      return Boolean.valueOf(validityString);
+      return new BooleanConverter().convertFromString(validityString);
     } catch (Exception e) {
       LOG.error("Error while determining session validity for " + sessionId +
                     "; returning invalid", e
@@ -912,6 +935,29 @@ public class RedisSessionManager implements Manager {
     }
   }
 
+ 
+  
+  
+  public void autovivifySession(String sessionId) {
+    Objects.requireNonNull(sessionId, "session id to autovivify");
+    String metadataId = Convention.sessionIdToMetadataKey(sessionId);
+    String dateString = Convention.stringFromDate(new Date());
+    String isValidString = new BooleanConverter().convertToString(true);
+
+    // Do this work simultaneously, but ensure it's done before we exit the method
+    Stream.<Redis.RedisConsumer>of(
+                                      jedis -> {
+                                        jedis.hsetnx(metadataId, Convention.IS_VALID_HKEY, isValidString);
+                                      },
+                                      jedis -> {
+                                        jedis.hsetnx(metadataId, Convention.CREATION_TIME_HKEY, dateString);
+                                      },
+                                      jedis -> {
+                                        jedis.hset(metadataId, Convention.LAST_ACCESS_TIME_HKEY, dateString);
+                                      }
+    ).map(consumer -> doInBackground(() -> redis.withRedis(consumer))).forEach(ForkJoinTask::join);
+  }
+
   private interface Procedure {
     void apply() throws Exception;
   }
@@ -948,4 +994,85 @@ public class RedisSessionManager implements Manager {
     }
 
   }
+
+public String getHost() {
+	return host;
+}
+
+public void setHost(String host) {
+	this.host = host;
+}
+
+public int getPort() {
+	return port;
+}
+
+public void setPort(int port) {
+	this.port = port;
+}
+
+public int getDatabase() {
+	return database;
+}
+
+public void setDatabase(int database) {
+	this.database = database;
+}
+
+public String getPassword() {
+	return password;
+}
+
+public void setPassword(String password) {
+	this.password = password;
+}
+
+public int getTimeout() {
+	return timeout;
+}
+
+public void setTimeout(int timeout) {
+	this.timeout = timeout;
+}
+
+
+@Override
+protected String getDomainInternal() {
+	// TODO Auto-generated method stub
+	return null;
+}
+
+
+@Override
+protected String getObjectNameKeyProperties() {
+	// TODO Auto-generated method stub
+	return null;
+}
+
+/**
+ * Initial redis config
+ */
+@Override
+protected void startInternal() throws LifecycleException {
+	InitialContext initialContext = null;
+     try {
+         initialContext = new InitialContext();
+         redis = (Redis) initialContext.lookup("java:/comp/env/pool/RedisConfig");
+     } catch (NamingException e) {
+         LOG.warn("RedisConfig not found in JNDI");
+     }
+     if (redis == null) {
+         redis =  new Redis(getHost(),getPort(),getTimeout()); // default configuration
+     }
+     
+     LOG.debug("RedisConfig from JNDI: " );
+     setState(LifecycleState.STARTING);
+}
+
+
+@Override
+protected void stopInternal() throws LifecycleException {
+	
+	setState(LifecycleState.STOPPING);
+}
 }

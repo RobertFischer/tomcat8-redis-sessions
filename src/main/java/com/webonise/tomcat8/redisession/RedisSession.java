@@ -35,6 +35,8 @@ public class RedisSession extends StandardSession implements Session {
     Objects.requireNonNull(manager.getRedis(), "Redis client for this session");
     Objects.requireNonNull(id, "the initial id for this session");
     this.id = id;
+    initProperties();
+    manager.autovivifySession(id);
   }
 
   protected static void triggerProperty(String name, RedisBackedPropertySupport<?> property) {

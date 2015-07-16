@@ -2,6 +2,7 @@ package com.webonise.tomcat8.redisession.redisclient;
 
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
+
 import redis.clients.jedis.Jedis;
 
 import java.util.*;
@@ -20,10 +21,10 @@ public class RedisBackedPropertySupport<U> {
   protected final String redisKey;
   protected final Function<String, U> fromString;
   private final Consumer<U> setter;
-  private final Function<U, String> toString;
+  private final Function<U,String> toString;
   protected volatile Optional<U> fetchedValue = Optional.empty();
 
-  public RedisBackedPropertySupport(Redis client, String redisKey, RedisConverter<? extends U> converter, Consumer<U> setter) {
+  public RedisBackedPropertySupport(Redis client, String redisKey,RedisConverter<U> converter , Consumer<U> setter) {
     Objects.requireNonNull(client, "Redis client for working with the propery");
     this.client = client;
 
@@ -32,7 +33,7 @@ public class RedisBackedPropertySupport<U> {
 
     Objects.requireNonNull(converter, "Conversion object");
     this.fromString = converter::convertFromString;
-    this.toString = converter::convertToString;
+    this.toString =   converter::convertToString;
 
     Objects.requireNonNull(setter, "Setter function to assign value");
     this.setter = setter;

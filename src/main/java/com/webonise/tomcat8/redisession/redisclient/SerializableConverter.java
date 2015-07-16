@@ -30,6 +30,7 @@ public class SerializableConverter<U extends Serializable> implements RedisConve
    */
   @Override
   public U convertFromString(String value) {
+	  
     byte[] bytes = Base64.getDecoder().decode(value);
     return SerializationUtils.deserialize(bytes);
   }
