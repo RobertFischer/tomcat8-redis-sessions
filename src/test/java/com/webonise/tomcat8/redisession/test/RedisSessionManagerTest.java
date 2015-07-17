@@ -4,8 +4,7 @@ package com.webonise.tomcat8.redisession.test;
 
 
 
-import javax.naming.Context;
-import javax.naming.InitialContext;
+
 import javax.naming.NamingException;
 
 import org.apache.catalina.Session;
@@ -38,7 +37,7 @@ public class RedisSessionManagerTest   {
 	    public void testSessionSetAtributes() throws Exception {
 	        RedisSession tempSession = redisSessionManagerT8.createSession("newId2016");     
 	        Assert.assertNotNull(tempSession);
-	     	
+	 	
 	    }
 	 
 	 @Ignore
@@ -57,8 +56,7 @@ public class RedisSessionManagerTest   {
 		
 	        session = redisSessionManagerT8.createSession("newGeneratedId0123445678901");
 	        Assert.assertNotNull(session);
-	       
-	        
+	     
 	    }
 	 
 	 @Ignore

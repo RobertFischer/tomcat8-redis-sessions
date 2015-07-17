@@ -7,10 +7,9 @@ import org.junit.Test;
 
 
 
+
+
 public abstract class RedisConverterTest<U> {
-	
-
-
 	
 	@Test
 	public void testEncode () {

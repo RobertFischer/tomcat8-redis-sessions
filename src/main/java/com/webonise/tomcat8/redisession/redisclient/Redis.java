@@ -2,12 +2,17 @@ package com.webonise.tomcat8.redisession.redisclient;
 
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
+
 import redis.clients.jedis.*;
 
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.*;
 import java.util.stream.*;
+
+
+
+
 
 /**
  * The class responsible for communicating with Redis.
@@ -46,7 +51,9 @@ public class Redis {
   public static final int DEFAULT_PORT = Protocol.DEFAULT_PORT;
   public static final int DEFAULT_TIMEOUT = Math.max(Protocol.DEFAULT_TIMEOUT, (int) TimeUnit.SECONDS.toMillis(1L));
 
+ 
   private final JedisPool pool;
+ 
 
   public Redis() {
     this(DEFAULT_PORT);
@@ -75,13 +82,16 @@ public class Redis {
     } else if (redisTimeout == 0) {
       log.warn("Redis timeout is 0, which is just asking for your application to hang.");
     }
-
+    
+  
+    
     JedisPoolConfig config = new JedisPoolConfig();
     config.setBlockWhenExhausted(false);
     config.setFairness(false);
     config.setLifo(true);
 
-    pool = new JedisPool(config, redisHost, redisPort, redisTimeout);
+   pool = new JedisPool(config, redisHost, redisPort, redisTimeout);
+   
   }
 
   /**

@@ -20,12 +20,12 @@ public class BooleanConverter implements RedisConverter<Boolean> {
       i = 0;
     } else {
       i = 1;
-    }
+    } 
     return Integer.toString(i);
   }
 
   /**
-   * Defines how to convert a string into a vlaue.
+   * Defines how to convert a string into a value.
    *
    * @param value The string to convert; never {@code null}.
    * @return The converted string; never {@code null}.
@@ -36,4 +36,5 @@ public class BooleanConverter implements RedisConverter<Boolean> {
     int i = Integer.parseInt(value);
     return i != 0;
   }
+  
 }

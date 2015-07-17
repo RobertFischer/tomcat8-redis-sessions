@@ -1,19 +1,20 @@
 package com.webonise.tomcat8.redisession.test;
 
-import static org.junit.Assert.assertEquals;
-
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 
 import org.junit.Assert;
+
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.webonise.tomcat8.redisession.redisclient.IntegerConverter;
+
 import com.webonise.tomcat8.redisession.redisclient.SerializableConverter;
 
 
@@ -25,24 +26,41 @@ public class SerializableConverterTest extends RedisConverterTest<Serializable> 
 		
 	 public Integer valueInput = Integer.MIN_VALUE ; 
 	 
+	 SerializableConverter<Serializable> serConverter =  null;
+	 
 	
 	 public SerializableConverterTest(String expected,Integer input){
 		 valueExpected = expected;
 		 valueInput = input;	 
+		 serConverter =  new SerializableConverter<Serializable>();
 	 }
 	 
+	 
 	 @Test
-		@Ignore
-		 public void testTwoObjects(){};
+		 public void testTwoObjects(){
 		 
+		  List<Integer>list1 =  new ArrayList<Integer>();
+		  list1.add(2);
+		  list1.add(3);
+		  
+		  List<Integer>list2 =  new ArrayList<Integer>();
+		  list1.add(2);
+		  list2.add(3);
+		  
+		  Assert.assertNotEquals(serConverter.convertToString(list2.toString()),serConverter.convertToString(list1.toString()));
+		  
+		 
+	 };
+		@Ignore
 		@Override
 		public void testDecode() {
-			Assert.assertNotEquals(valueInput,new SerializableConverter<>().convertFromString(valueExpected));
+			Assert.assertEquals(valueInput,serConverter.convertFromString(serConverter.convertToString(valueInput)));
 		}
 		
+		@Ignore
 		@Override
 		public void testEncode() {
-		  Assert.assertNotEquals(valueExpected,new SerializableConverter<>().convertToString(valueInput));
+		  Assert.assertNotEquals(valueExpected,serConverter.convertToString(valueInput));
 		}
 		
 		@Parameters

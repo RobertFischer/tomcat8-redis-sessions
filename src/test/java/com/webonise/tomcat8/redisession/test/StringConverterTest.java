@@ -5,12 +5,14 @@ import static org.junit.Assert.assertEquals;
 import java.util.Arrays;
 import java.util.Collection;
 
-
+import org.junit.Assert;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 
+
+import com.webonise.tomcat8.redisession.redisclient.SerializableConverter;
 import com.webonise.tomcat8.redisession.redisclient.StringConverter;
 
 
@@ -20,20 +22,26 @@ public class StringConverterTest extends RedisConverterTest<String> {
 	public String expectedValue = null;
 	public String inputValue =  null;
 	
+	 private SerializableConverter<String> serConverter =  null;
+	 private StringConverter strConverter = null;
+	 
 	public StringConverterTest(String input, String expected){
 		 this.expectedValue =  expected ;
 		 this.inputValue = input ;
+		 serConverter =  new SerializableConverter<String>();
+		 strConverter=  new  StringConverter();
 	}
 	
 	@Override
 	public void testDecode() {
-		
-		assertEquals(inputValue,new StringConverter().convertToString(inputValue));
+		String inputEncode =  serConverter.convertToString(inputValue);
+		assertEquals(expectedValue,strConverter.convertToString(serConverter.convertFromString(inputEncode)));
 	}
 	
 	@Override
 	public void testEncode() {
-		assertEquals(expectedValue,new StringConverter().convertFromString(inputValue));
+		Assert.assertNotEquals(expectedValue,strConverter.convertFromString(serConverter.convertToString(inputValue)));
+
 	}
 	
 	
@@ -42,7 +50,10 @@ public class StringConverterTest extends RedisConverterTest<String> {
 	@Override
 	public void testTwoObjects() {
 		
-		super.testTwoObjects();
+		String object1 = "String1" ;
+		String objert2 = "String 2" ;
+		
+		Assert.assertNotEquals(serConverter.convertToString(object1),serConverter.convertToString(objert2));
 	}
 	
 	@Parameters
